@@ -1,0 +1,14 @@
+[project]
+name = "starboard-solver"
+version = "0.0.0"
+description = "Graph model, baseline, solver and scorecard (pure, no I/O)"
+requires-python = ">=3.12,<3.13"
+license = "FSL-1.1-ALv2"
+dependencies = ["pydantic>=2.7"]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/starboard"]

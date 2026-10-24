@@ -1,0 +1,17 @@
+[project]
+name = "starboard-export"
+version = "0.0.0"
+description = "Driver route sheet PDF, CSV and GPX/KML exports"
+requires-python = ">=3.12,<3.13"
+license = "FSL-1.1-ALv2"
+dependencies = ["starboard-solver"]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/starboard"]
+
+[tool.uv.sources]
+starboard-solver = { workspace = true }
