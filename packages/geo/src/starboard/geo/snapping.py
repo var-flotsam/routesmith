@@ -3,8 +3,10 @@
 A stop's curb side comes from the sign of the cross product between the
 segment's direction at the snap point and the vector to the stop. The pass
 that services it is the direction that puts the stop on the truck's right.
-Anything that cannot be decided becomes a review item with a reason; this
-module never raises on stop data.
+When a point is about equally close to two streets (typically a corner lot),
+the street named in the stop's address decides. Anything that cannot be
+decided becomes a review item with a reason; this module never raises on
+stop data.
 """
 
 from collections.abc import Iterable, Sequence
@@ -14,6 +16,7 @@ from enum import StrEnum
 from shapely import LineString, Point, STRtree
 
 from starboard.geo.projection import LocalProjection
+from starboard.geo.street_names import same_street_name
 from starboard.solver import defaults
 from starboard.solver.graph import CurbSide, Direction, LonLat, Pass, StateGraph, StreetSegment
 
@@ -23,8 +26,11 @@ _TANGENT_HALF_LENGTH_M = 0.5
 
 @dataclass(frozen=True, slots=True)
 class StopPoint:
+    """A stop's location, and the street its address names when there is one."""
+
     stop_id: str
     location: LonLat
+    street: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,10 +81,6 @@ def _side_of(line: LineString, along: float, point: Point) -> tuple[CurbSide | N
     return (CurbSide.LEFT if cross > 0 else CurbSide.RIGHT), distance
 
 
-def _same_street(first: StreetSegment, second: StreetSegment) -> bool:
-    return first.name is not None and first.name == second.name
-
-
 class Snapper:
     """Snaps points to one network; build once, then snap any number of stops."""
 
@@ -107,21 +109,26 @@ class Snapper:
                 f"no street within {max_distance:g} m",
             )
 
-        best_distance, best_id, best_index = candidates[0]
-        best = self._segments[best_index]
-        rivals = [
-            self._segments[i]
-            for distance, _, i in candidates[1:]
-            if distance - best_distance < defaults.SNAP_AMBIGUITY_MARGIN.value
-            and not _same_street(best, self._segments[i])
+        nearest_distance = candidates[0][0]
+        close = [
+            i
+            for distance, _, i in candidates
+            if distance - nearest_distance < defaults.SNAP_AMBIGUITY_MARGIN.value
         ]
-        if rivals:
-            return ReviewItem(
-                stop.stop_id,
-                ReviewReason.AMBIGUOUS_STREET,
-                f"about equally close to {len(rivals) + 1} streets",
-                (best_id, *(r.segment_id for r in rivals)),
-            )
+        nearest = self._segments[close[0]]
+        if any(not same_street_name(nearest.name, self._segments[i].name) for i in close[1:]):
+            named = [i for i in close if same_street_name(stop.street, self._segments[i].name)]
+            if not named:
+                return ReviewItem(
+                    stop.stop_id,
+                    ReviewReason.AMBIGUOUS_STREET,
+                    "about equally close to more than one street",
+                    tuple(self._segments[i].segment_id for i in close),
+                )
+            close = named
+        best_index = close[0]
+        best = self._segments[best_index]
+        best_id = best.segment_id
 
         line = self._lines[best_index]
         along = line.project(point)

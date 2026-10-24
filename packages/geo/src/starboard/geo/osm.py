@@ -19,7 +19,6 @@ from typing import Any  # OSMnx graphs carry untyped attribute dicts
 
 import networkx as nx
 import osmnx as ox
-import requests
 
 from starboard.geo.projection import EARTH_MEAN_RADIUS_M
 from starboard.geo.state_graph import build_state_graph
@@ -123,31 +122,39 @@ def _fields(segment: StreetSegment) -> dict[str, Any]:
     return {name: getattr(segment, name) for name in StreetSegment.__slots__}
 
 
-def _overpass_timestamp() -> str | None:
-    """The OSM database timestamp the Overpass server is serving right now."""
-    try:
-        response = requests.get(
-            ox.settings.overpass_url + "/interpreter",
-            params={"data": "[out:json];out;"},
-            timeout=ox.settings.requests_timeout,
+def _osm_timestamp(responses: Iterable[Path]) -> str | None:
+    """The oldest OSM database timestamp among Overpass responses, if any record one."""
+    timestamps: list[str] = []
+    for response in responses:
+        try:
+            body = json.loads(response.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        timestamp = (
+            body.get("osm3s", {}).get("timestamp_osm_base") if isinstance(body, dict) else None
         )
-        response.raise_for_status()
-        timestamp = response.json().get("osm3s", {}).get("timestamp_osm_base")
-    except (requests.RequestException, ValueError):
-        return None
-    return timestamp if isinstance(timestamp, str) else None
+        if isinstance(timestamp, str):
+            timestamps.append(timestamp)
+    return min(timestamps) if timestamps else None
 
 
 def fetch_network(bbox: BoundingBox, cache_dir: Path = DEFAULT_CACHE_DIR) -> StateGraph:
-    """The state graph for `bbox`, from the on-disk cache or a fresh Overpass fetch."""
+    """The state graph for `bbox`, from the on-disk cache or a fresh Overpass fetch.
+
+    OSMnx keeps its raw Overpass responses in `cache_dir/overpass/`; the OSM
+    timestamp is read from the responses this fetch wrote.
+    """
     graphml = cache_dir / f"{bbox.cache_key()}.graphml"
     sidecar = graphml.with_suffix(".json")
     if graphml.exists() and sidecar.exists():
         graph = ox.load_graphml(graphml)
         snapshot = json.loads(sidecar.read_text(encoding="utf-8"))
     else:
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        osm_timestamp = _overpass_timestamp()
+        responses_dir = cache_dir / "overpass"
+        responses_dir.mkdir(parents=True, exist_ok=True)
+        ox.settings.use_cache = True
+        ox.settings.cache_folder = responses_dir
+        before = set(responses_dir.glob("*.json"))
         graph = ox.graph_from_bbox(
             (bbox.west, bbox.south, bbox.east, bbox.north),
             network_type="drive",
@@ -158,7 +165,7 @@ def fetch_network(bbox: BoundingBox, cache_dir: Path = DEFAULT_CACHE_DIR) -> Sta
             NetworkSnapshot(
                 bbox=bbox,
                 fetched_at=datetime.now(UTC).isoformat(timespec="seconds"),
-                osm_timestamp=osm_timestamp,
+                osm_timestamp=_osm_timestamp(set(responses_dir.glob("*.json")) - before),
             )
         )
         sidecar.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")

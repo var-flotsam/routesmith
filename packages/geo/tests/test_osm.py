@@ -62,10 +62,11 @@ def test_network_is_fetched_once_then_read_from_cache(tmp_path, monkeypatch):
 
     def fake_fetch(bbox, **kwargs):
         calls.append(bbox)
+        response = {"osm3s": {"timestamp_osm_base": "2026-10-24T09:00:00Z"}, "elements": []}
+        (osm.ox.settings.cache_folder / "response.json").write_text(json.dumps(response))
         return osmnx_like_graph()
 
     monkeypatch.setattr(osm.ox, "graph_from_bbox", fake_fetch)
-    monkeypatch.setattr(osm, "_overpass_timestamp", lambda: "2026-10-24T09:00:00Z")
     bbox = BoundingBox(west=-73.001, south=40.999, east=-72.997, north=41.001)
 
     first = fetch_network(bbox, cache_dir=tmp_path)
@@ -75,4 +76,5 @@ def test_network_is_fetched_once_then_read_from_cache(tmp_path, monkeypatch):
     assert first.osm_snapshot == second.osm_snapshot == "2026-10-24T09:00:00Z"
     assert sorted(first.segments) == sorted(second.segments)
     sidecar = json.loads(next(tmp_path.glob("*.json")).read_text(encoding="utf-8"))
+    assert sidecar["osm_timestamp"] == "2026-10-24T09:00:00Z"
     assert sidecar["bbox"]["west"] == -73.001

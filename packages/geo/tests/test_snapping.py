@@ -98,3 +98,19 @@ def test_snap_stops_splits_snapped_from_review_without_raising():
     )
     assert [s.stop_id for s in outcome.snapped] == ["ok"]
     assert [r.stop_id for r in outcome.review] == ["far"]
+
+
+def test_a_corner_lot_takes_the_street_its_address_names():
+    location = at(BLOCK_M + 10.0, 10.0)  # inside the corner of row 0 and column 1
+    by_row = SNAPPER.snap(StopPoint("corner", location, street="Row 0 St"))
+    by_column = SNAPPER.snap(StopPoint("corner", location, street="column 1 ave."))
+    assert isinstance(by_row, SnappedStop)
+    assert by_row.segment_id == "h-0-1"
+    assert isinstance(by_column, SnappedStop)
+    assert by_column.segment_id == "v-0-1"
+
+
+def test_an_address_naming_neither_street_keeps_the_corner_in_review():
+    result = SNAPPER.snap(StopPoint("corner", at(BLOCK_M + 10.0, BLOCK_M + 10.0), street="Elm St"))
+    assert isinstance(result, ReviewItem)
+    assert result.reason is ReviewReason.AMBIGUOUS_STREET
