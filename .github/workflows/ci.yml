@@ -1,0 +1,65 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-24.04
+    env:
+      HYPOTHESIS_PROFILE: ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --all-packages --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run pytest -m "not demo"
+
+  gitleaks:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read  # the action lists the pull request's commits
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  banned-terms:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Write the term list from the masked secret
+        env:
+          BANNED_TERMS: ${{ secrets.BANNED_TERMS }}
+        run: |
+          umask 077
+          printf '%s\n' "$BANNED_TERMS" > "$RUNNER_TEMP/banned-terms.txt"
+      - name: Scan every tracked file
+        env:
+          BANNED_TERMS_FILE: ${{ runner.temp }}/banned-terms.txt
+        run: sh scripts/check-banned-terms.sh --all
+      - name: Scan this pull request's files and commit messages
+        if: github.event_name == 'pull_request'
+        env:
+          BANNED_TERMS_FILE: ${{ runner.temp }}/banned-terms.txt
+        run: sh scripts/check-banned-terms.sh --range "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+      - name: Scan pushed commit messages
+        if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
+        env:
+          BANNED_TERMS_FILE: ${{ runner.temp }}/banned-terms.txt
+        run: sh scripts/check-banned-terms.sh --range "${{ github.event.before }}..${{ github.sha }}"

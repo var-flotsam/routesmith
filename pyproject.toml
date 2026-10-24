@@ -1,0 +1,52 @@
+[project]
+name = "routesmith"
+version = "0.0.0"
+description = "Starboard Routing workspace root"
+requires-python = ">=3.12,<3.13"
+dependencies = ["starboard-solver", "starboard-geo", "starboard-export"]
+
+[dependency-groups]
+dev = [
+  "hypothesis>=6.100",
+  "mypy>=1.11",
+  "pytest>=8.2",
+  "ruff>=0.6",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+starboard-solver = { workspace = true }
+starboard-geo = { workspace = true }
+starboard-export = { workspace = true }
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "RUF", "PL", "ANN"]
+ignore = ["PLR2004"]  # comparisons with literals are normal in tests; defaults.py rule covers tunables
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["ANN", "PLR"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+files = ["packages/solver/src", "packages/geo/src", "packages/export/src"]
+mypy_path = ["packages/solver/src", "packages/geo/src", "packages/export/src"]
+namespace_packages = true
+explicit_package_bases = true
+
+[tool.pytest.ini_options]
+testpaths = ["packages"]
+addopts = ["--import-mode=importlib", "--strict-markers"]
+markers = [
+  "property: hypothesis property tests of the solver's hard constraints",
+  "demo: tests that need the demo town's OSM network (fetched once into cache/)",
+]
