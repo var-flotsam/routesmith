@@ -4,7 +4,13 @@ version = "0.0.0"
 description = "OSM fetch and cache, state graph, snapping and curb assignment"
 requires-python = ">=3.12,<3.13"
 license = "FSL-1.1-ALv2"
-dependencies = ["starboard-solver", "pydantic>=2.7"]
+dependencies = [
+    "starboard-solver",
+    "pydantic>=2.7",
+    "osmnx>=2.0",
+    "shapely>=2.0",
+    "networkx>=3.3",
+]
 
 [build-system]
 requires = ["hatchling>=1.25"]
