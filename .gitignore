@@ -8,3 +8,11 @@ CLAUDE.local.md
 # Cached OSM and geocoder data
 cache/
 data/osm/
+
+# Python tooling
+.venv/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
