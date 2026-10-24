@@ -11,6 +11,8 @@ dev = [
   "mypy>=1.11",
   "pytest>=8.2",
   "ruff>=0.6",
+  "types-networkx>=3.6.1.20261024",
+  "types-shapely>=2.1.0.20260728",
 ]
 
 [tool.uv]
@@ -31,6 +33,9 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "RUF", "PL", "ANN"]
 ignore = ["PLR2004"]  # comparisons with literals are normal in tests; defaults.py rule covers tunables
+
+[tool.ruff.lint.isort]
+known-first-party = ["starboard"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["ANN", "PLR"]
