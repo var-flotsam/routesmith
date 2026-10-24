@@ -1,0 +1,10 @@
+# Private session rules
+CLAUDE.local.md
+
+# Secrets
+.env
+.env.*
+
+# Cached OSM and geocoder data
+cache/
+data/osm/
