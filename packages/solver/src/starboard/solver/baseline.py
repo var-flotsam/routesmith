@@ -27,6 +27,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from starboard.solver import defaults
+from starboard.solver.connections import allowed_transitions
 from starboard.solver.costs import drive_seconds, turn_seconds
 from starboard.solver.graph import Direction, Pass, SnappedStop, StateGraph, Transition
 from starboard.solver.rules import RoutingRules, u_turn_nodes
@@ -125,11 +126,7 @@ class _Router:
     def __init__(self, graph: StateGraph, u_turns_at: frozenset[int]) -> None:
         self._graph = graph
         self._outgoing: dict[Pass, list[Transition]] = defaultdict(list)
-        for transition in graph.transitions:
-            if transition.forbidden_by_restriction:
-                continue
-            if transition.is_u_turn and transition.via_node not in u_turns_at:
-                continue
+        for transition in allowed_transitions(graph, u_turns_at):
             self._outgoing[transition.from_pass].append(transition)
         self._passes = frozenset(graph.passes)
 
