@@ -82,11 +82,16 @@ def _side_of(line: LineString, along: float, point: Point) -> tuple[CurbSide | N
 
 
 class Snapper:
-    """Snaps points to one network; build once, then snap any number of stops."""
+    """Snaps points to one network; build once, then snap any number of stops.
+
+    Only serviceable segments are candidates, so a stop beside a motorway
+    snaps to the street it is actually on.
+    """
 
     def __init__(self, graph: StateGraph) -> None:
-        self._segments: Sequence[StreetSegment] = list(graph.segments.values())
-        self._projection = LocalProjection.centred_on(p for s in self._segments for p in s.geometry)
+        everything = list(graph.segments.values())
+        self._projection = LocalProjection.centred_on(p for s in everything for p in s.geometry)
+        self._segments: Sequence[StreetSegment] = [s for s in everything if s.serviceable]
         self._lines = [
             LineString([self._projection.to_xy(p) for p in s.geometry]) for s in self._segments
         ]

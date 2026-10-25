@@ -38,7 +38,12 @@ class LonLat:
 
 @dataclass(frozen=True, slots=True)
 class StreetSegment:
-    """One street segment; `geometry` runs from `from_node` to `to_node`."""
+    """One street segment; `geometry` runs from `from_node` to `to_node`.
+
+    `serviceable` is false for roads with no curbside collection, such as
+    motorways and their ramps: the truck may drive them, but no stop is
+    placed on them.
+    """
 
     segment_id: str
     from_node: int
@@ -49,6 +54,8 @@ class StreetSegment:
     forward_allowed: bool
     reverse_allowed: bool
     speed_limit_kph: float | None = None
+    road_class: str | None = None
+    serviceable: bool = True
 
     @property
     def is_one_way(self) -> bool:

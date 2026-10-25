@@ -14,7 +14,7 @@ from starboard.geo.snapping import (
     snap_stops,
 )
 from starboard.geo.state_graph import build_state_graph
-from starboard.solver.graph import CurbSide, Direction, LonLat
+from starboard.solver.graph import CurbSide, Direction, LonLat, StreetSegment
 
 GRAPH = build_state_graph(grid_segments())
 SNAPPER = Snapper(GRAPH)
@@ -114,3 +114,22 @@ def test_an_address_naming_neither_street_keeps_the_corner_in_review():
     result = SNAPPER.snap(StopPoint("corner", at(BLOCK_M + 10.0, BLOCK_M + 10.0), street="Elm St"))
     assert isinstance(result, ReviewItem)
     assert result.reason is ReviewReason.AMBIGUOUS_STREET
+
+
+def test_unserviceable_segments_are_never_snapped_to():
+    motorway = StreetSegment(
+        segment_id="motorway",
+        from_node=900,
+        to_node=901,
+        geometry=(at(-50.0, 50.0), at(-50.0, 250.0)),
+        length_m=200.0,
+        name="Interstate 95",
+        forward_allowed=True,
+        reverse_allowed=False,
+        road_class="motorway",
+        serviceable=False,
+    )
+    snapper = Snapper(build_state_graph([*grid_segments(), motorway]))
+    result = snapper.snap(StopPoint("beside", at(-45.0, 150.0)))  # 5 m from it, 45 m from column 0
+    assert isinstance(result, SnappedStop)
+    assert result.segment_id.startswith("v-")
