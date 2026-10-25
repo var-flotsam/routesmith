@@ -21,12 +21,14 @@ def osmnx_like_graph() -> nx.MultiDiGraph:
         2, 1, 0, geometry=LineString(bent.coords[::-1]), oneway=False, reversed=True, **common
     )
     graph.add_edge(2, 3, 0, osmid=200, name=["Oak Lane", "Oak Ln"], length=84.0, oneway=True)
+    graph.add_node(4, x=-72.997, y=41.000)
+    graph.add_edge(3, 4, 0, osmid=300, highway="motorway_link", length=80.0, oneway=True)
     return graph
 
 
 def test_opposite_edges_become_one_two_way_segment():
     segments = {s.segment_id: s for s in segments_from_osmnx(osmnx_like_graph())}
-    assert sorted(segments) == ["1-2-0", "2-3-0"]
+    assert sorted(segments) == ["1-2-0", "2-3-0", "3-4-0"]
 
     elm = segments["1-2-0"]
     assert (elm.forward_allowed, elm.reverse_allowed) == (True, True)
@@ -37,6 +39,11 @@ def test_opposite_edges_become_one_two_way_segment():
     assert (oak.forward_allowed, oak.reverse_allowed) == (True, False)
     assert oak.name == "Oak Lane"
     assert len(oak.geometry) == 2
+    assert oak.serviceable
+
+    ramp = segments["3-4-0"]
+    assert ramp.road_class == "motorway_link"
+    assert not ramp.serviceable
 
 
 @pytest.mark.parametrize(

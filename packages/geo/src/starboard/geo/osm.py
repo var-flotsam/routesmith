@@ -25,6 +25,11 @@ from starboard.geo.state_graph import build_state_graph
 from starboard.solver.graph import LonLat, StateGraph, StreetSegment
 
 DEFAULT_CACHE_DIR = Path("cache/osm")
+
+# Controlled-access roads, with no driveways or curbside carts:
+# https://wiki.openstreetmap.org/wiki/Tag:highway%3Dmotorway and
+# https://wiki.openstreetmap.org/wiki/Tag:highway%3Dmotorway_link
+UNSERVICEABLE_ROAD_CLASSES = frozenset({"motorway", "motorway_link"})
 _KPH_PER_MPH = 1.609344  # international mile: https://www.nist.gov/pml/us-surveyfoot/revised-unit-conversion-factors
 
 
@@ -103,6 +108,7 @@ def segments_from_osmnx(graph: nx.MultiDiGraph[Any]) -> list[StreetSegment]:
                 continue
         segment_id = f"{u}-{v}-{key}"
         name = _first(data.get("name"))
+        road_class = _first(data.get("highway"))
         segments[segment_id] = StreetSegment(
             segment_id=segment_id,
             from_node=int(u),
@@ -113,6 +119,8 @@ def segments_from_osmnx(graph: nx.MultiDiGraph[Any]) -> list[StreetSegment]:
             forward_allowed=True,
             reverse_allowed=False,
             speed_limit_kph=parse_speed_kph(data.get("maxspeed")),
+            road_class=road_class if isinstance(road_class, str) else None,
+            serviceable=road_class not in UNSERVICEABLE_ROAD_CLASSES,
         )
         by_shape.setdefault(shape, segment_id)
     return list(segments.values())
@@ -141,8 +149,8 @@ def _osm_timestamp(responses: Iterable[Path]) -> str | None:
 def fetch_network(bbox: BoundingBox, cache_dir: Path = DEFAULT_CACHE_DIR) -> StateGraph:
     """The state graph for `bbox`, from the on-disk cache or a fresh Overpass fetch.
 
-    OSMnx keeps its raw Overpass responses in `cache_dir/overpass/`; the OSM
-    timestamp is read from the responses this fetch wrote.
+    OSMnx keeps its raw Overpass responses in `cache_dir/overpass/<bbox key>/`;
+    the OSM timestamp is read from the responses for this bounding box.
     """
     graphml = cache_dir / f"{bbox.cache_key()}.graphml"
     sidecar = graphml.with_suffix(".json")
@@ -150,11 +158,10 @@ def fetch_network(bbox: BoundingBox, cache_dir: Path = DEFAULT_CACHE_DIR) -> Sta
         graph = ox.load_graphml(graphml)
         snapshot = json.loads(sidecar.read_text(encoding="utf-8"))
     else:
-        responses_dir = cache_dir / "overpass"
+        responses_dir = cache_dir / "overpass" / bbox.cache_key()
         responses_dir.mkdir(parents=True, exist_ok=True)
         ox.settings.use_cache = True
         ox.settings.cache_folder = responses_dir
-        before = set(responses_dir.glob("*.json"))
         graph = ox.graph_from_bbox(
             (bbox.west, bbox.south, bbox.east, bbox.north),
             network_type="drive",
@@ -165,7 +172,7 @@ def fetch_network(bbox: BoundingBox, cache_dir: Path = DEFAULT_CACHE_DIR) -> Sta
             NetworkSnapshot(
                 bbox=bbox,
                 fetched_at=datetime.now(UTC).isoformat(timespec="seconds"),
-                osm_timestamp=_osm_timestamp(set(responses_dir.glob("*.json")) - before),
+                osm_timestamp=_osm_timestamp(responses_dir.glob("*.json")),
             )
         )
         sidecar.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
