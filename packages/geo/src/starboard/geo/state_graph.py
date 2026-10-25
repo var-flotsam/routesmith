@@ -2,9 +2,48 @@
 
 from collections import defaultdict
 from collections.abc import Iterable
+from dataclasses import dataclass
+from enum import StrEnum
 
 from starboard.geo.projection import LocalProjection, heading_change_deg, heading_deg
 from starboard.solver.graph import Direction, Pass, StateGraph, StreetSegment, Transition
+
+
+class RestrictionKind(StrEnum):
+    """OSM `no_*` restrictions forbid one turn; `only_*` forbid every other turn."""
+
+    PROHIBITORY = "prohibitory"
+    MANDATORY = "mandatory"
+
+
+@dataclass(frozen=True, slots=True)
+class TurnRestriction:
+    """A posted turn restriction from one OSM way, through a node, onto another way.
+
+    See https://wiki.openstreetmap.org/wiki/Relation:restriction.
+    """
+
+    from_way: int
+    via_node: int
+    to_way: int
+    kind: RestrictionKind
+
+
+def _forbidden(
+    arriving: StreetSegment,
+    leaving: StreetSegment,
+    node: int,
+    restrictions_at: dict[int, list[TurnRestriction]],
+) -> bool:
+    for restriction in restrictions_at.get(node, ()):
+        if restriction.from_way not in arriving.osm_way_ids:
+            continue
+        onto_to_way = restriction.to_way in leaving.osm_way_ids
+        if restriction.kind is RestrictionKind.PROHIBITORY and onto_to_way:
+            return True
+        if restriction.kind is RestrictionKind.MANDATORY and not onto_to_way:
+            return True
+    return False
 
 
 def _pass_nodes(segment: StreetSegment, direction: Direction) -> tuple[int, int]:
@@ -26,12 +65,15 @@ def _pass_headings(
 
 
 def build_state_graph(
-    segments: Iterable[StreetSegment], osm_snapshot: str | None = None
+    segments: Iterable[StreetSegment],
+    osm_snapshot: str | None = None,
+    restrictions: Iterable[TurnRestriction] = (),
 ) -> StateGraph:
     """Every legal pass, and every transition between passes that meet at a node.
 
-    Transitions are not filtered by turn rules here: U-turns are flagged, and
-    the solver decides which are allowed (dead ends always are).
+    Transitions a posted restriction forbids are kept and marked, so the
+    scorecard can count a current route that takes one. U-turns are flagged
+    and the solver decides which are allowed (dead ends always are).
     """
     ordered = sorted(segments, key=lambda segment: segment.segment_id)
     by_id = {segment.segment_id: segment for segment in ordered}
@@ -70,6 +112,10 @@ def build_state_graph(
             starting_at[start].append(state)
             ending_at[state] = end
 
+    restrictions_at: dict[int, list[TurnRestriction]] = defaultdict(list)
+    for restriction in restrictions:
+        restrictions_at[restriction.via_node].append(restriction)
+
     transitions = [
         Transition(
             from_pass=arriving,
@@ -79,6 +125,9 @@ def build_state_graph(
             is_u_turn=(
                 leaving.segment_id == arriving.segment_id
                 and leaving.direction is not arriving.direction
+            ),
+            forbidden_by_restriction=_forbidden(
+                by_id[arriving.segment_id], by_id[leaving.segment_id], node, restrictions_at
             ),
         )
         for arriving in passes

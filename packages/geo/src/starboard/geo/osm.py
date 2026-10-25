@@ -2,7 +2,9 @@
 
 Networks are cached on disk under `cache/osm/` (git-ignored) as GraphML with
 a JSON sidecar recording the bounding box, fetch time and the OSM database
-timestamp, so every run can state which OSM snapshot it used.
+timestamp, so every run can state which OSM snapshot it used. Turn
+restriction relations, which OSMnx does not keep, are fetched from Overpass
+separately and cached beside the network.
 """
 
 from __future__ import annotations
@@ -19,9 +21,10 @@ from typing import Any  # OSMnx graphs carry untyped attribute dicts
 
 import networkx as nx
 import osmnx as ox
+import requests
 
 from starboard.geo.projection import EARTH_MEAN_RADIUS_M
-from starboard.geo.state_graph import build_state_graph
+from starboard.geo.state_graph import RestrictionKind, TurnRestriction, build_state_graph
 from starboard.solver.graph import LonLat, StateGraph, StreetSegment
 
 DEFAULT_CACHE_DIR = Path("cache/osm")
@@ -121,9 +124,15 @@ def segments_from_osmnx(graph: nx.MultiDiGraph[Any]) -> list[StreetSegment]:
             speed_limit_kph=parse_speed_kph(data.get("maxspeed")),
             road_class=road_class if isinstance(road_class, str) else None,
             serviceable=road_class not in UNSERVICEABLE_ROAD_CLASSES,
+            osm_way_ids=_way_ids(data.get("osmid")),
         )
         by_shape.setdefault(shape, segment_id)
     return list(segments.values())
+
+
+def _way_ids(value: object) -> tuple[int, ...]:
+    values = value if isinstance(value, list) else [value]
+    return tuple(sorted(int(v) for v in values if isinstance(v, int | str) and str(v).isdigit()))
 
 
 def _fields(segment: StreetSegment) -> dict[str, Any]:
@@ -146,6 +155,60 @@ def _osm_timestamp(responses: Iterable[Path]) -> str | None:
     return min(timestamps) if timestamps else None
 
 
+def restrictions_from_overpass(body: dict[str, Any]) -> tuple[list[TurnRestriction], int]:
+    """Turn restrictions from an Overpass `out body` response of restriction relations.
+
+    Returns the restrictions this model can apply and a count of those it
+    cannot: restrictions through a way rather than a node, or with a
+    missing or unknown member or value. `restriction:hgv` wins over
+    `restriction` where both are tagged, since collection trucks are HGVs.
+    """
+    restrictions: list[TurnRestriction] = []
+    unsupported = 0
+    for element in body.get("elements", []):
+        if element.get("type") != "relation":
+            continue
+        tags = element.get("tags", {})
+        value = str(tags.get("restriction:hgv") or tags.get("restriction") or "")
+        kind = (
+            RestrictionKind.PROHIBITORY
+            if value.startswith("no_")
+            else RestrictionKind.MANDATORY
+            if value.startswith("only_")
+            else None
+        )
+        members = element.get("members", [])
+        from_ways = [
+            m["ref"] for m in members if m.get("role") == "from" and m.get("type") == "way"
+        ]
+        to_ways = [m["ref"] for m in members if m.get("role") == "to" and m.get("type") == "way"]
+        via_nodes = [
+            m["ref"] for m in members if m.get("role") == "via" and m.get("type") == "node"
+        ]
+        if kind is None or len(from_ways) != 1 or len(to_ways) != 1 or len(via_nodes) != 1:
+            unsupported += 1
+            continue
+        restrictions.append(TurnRestriction(from_ways[0], via_nodes[0], to_ways[0], kind))
+    return restrictions, unsupported
+
+
+def _fetch_restriction_relations(bbox: BoundingBox) -> dict[str, Any]:
+    query = (
+        f"[out:json][timeout:{ox.settings.requests_timeout}];"
+        f'rel["type"="restriction"]({bbox.south},{bbox.west},{bbox.north},{bbox.east});'
+        "out body;"
+    )
+    response = requests.post(
+        ox.settings.overpass_url + "/interpreter",
+        data={"data": query},
+        headers={"User-Agent": ox.settings.http_user_agent},
+        timeout=ox.settings.requests_timeout,
+    )
+    response.raise_for_status()
+    body: dict[str, Any] = response.json()
+    return body
+
+
 def fetch_network(bbox: BoundingBox, cache_dir: Path = DEFAULT_CACHE_DIR) -> StateGraph:
     """The state graph for `bbox`, from the on-disk cache or a fresh Overpass fetch.
 
@@ -154,6 +217,7 @@ def fetch_network(bbox: BoundingBox, cache_dir: Path = DEFAULT_CACHE_DIR) -> Sta
     """
     graphml = cache_dir / f"{bbox.cache_key()}.graphml"
     sidecar = graphml.with_suffix(".json")
+    restrictions_file = graphml.with_suffix(".restrictions.json")
     if graphml.exists() and sidecar.exists():
         graph = ox.load_graphml(graphml)
         snapshot = json.loads(sidecar.read_text(encoding="utf-8"))
@@ -176,9 +240,16 @@ def fetch_network(bbox: BoundingBox, cache_dir: Path = DEFAULT_CACHE_DIR) -> Sta
             )
         )
         sidecar.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
+    if not restrictions_file.exists():
+        relations = _fetch_restriction_relations(bbox)
+        restrictions_file.write_text(json.dumps(relations), encoding="utf-8")
+    restrictions, _ = restrictions_from_overpass(
+        json.loads(restrictions_file.read_text(encoding="utf-8"))
+    )
     return build_state_graph(
         segments_from_osmnx(graph),
         osm_snapshot=snapshot.get("osm_timestamp") or snapshot.get("fetched_at"),
+        restrictions=restrictions,
     )
 
 

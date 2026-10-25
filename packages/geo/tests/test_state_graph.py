@@ -1,7 +1,7 @@
 import pytest
-from grid import BLOCK_M, at, grid_segments, node
+from grid import BLOCK_M, at, grid_segments, node, way_id
 
-from starboard.geo.state_graph import build_state_graph
+from starboard.geo.state_graph import RestrictionKind, TurnRestriction, build_state_graph
 from starboard.solver.graph import Direction, Pass, StreetSegment
 
 
@@ -73,3 +73,44 @@ def test_dead_ends_are_nodes_with_one_segment():
 def test_output_does_not_depend_on_input_order():
     segments = grid_segments()
     assert build_state_graph(segments) == build_state_graph(list(reversed(segments)))
+
+
+def _forbidden_from(graph, arriving: Pass) -> dict[Pass, bool]:
+    return {
+        t.to_pass: t.forbidden_by_restriction for t in graph.transitions if t.from_pass == arriving
+    }
+
+
+def test_a_prohibitory_restriction_forbids_exactly_that_turn():
+    no_left = TurnRestriction(
+        way_id("h-1-0"), node(1, 1), way_id("v-1-1"), RestrictionKind.PROHIBITORY
+    )
+    graph = build_state_graph(grid_segments(), restrictions=[no_left])
+    forbidden = _forbidden_from(graph, Pass("h-1-0", Direction.FORWARD))
+    assert forbidden == {
+        Pass("h-1-1", Direction.FORWARD): False,
+        Pass("v-1-1", Direction.FORWARD): True,
+        Pass("v-0-1", Direction.REVERSE): False,
+    }
+    assert sum(t.forbidden_by_restriction for t in graph.transitions) == 1
+
+
+def test_a_mandatory_restriction_forbids_every_other_turn():
+    only_straight = TurnRestriction(
+        way_id("h-0-0"), node(0, 1), way_id("h-0-1"), RestrictionKind.MANDATORY
+    )
+    graph = build_state_graph(grid_segments(), restrictions=[only_straight])
+    forbidden = _forbidden_from(graph, Pass("h-0-0", Direction.FORWARD))
+    assert forbidden == {
+        Pass("h-0-0", Direction.REVERSE): True,  # the U-turn
+        Pass("h-0-1", Direction.FORWARD): False,
+        Pass("v-0-1", Direction.FORWARD): True,
+    }
+
+
+def test_a_restriction_at_another_node_changes_nothing():
+    elsewhere = TurnRestriction(
+        way_id("h-1-0"), node(3, 3), way_id("v-1-1"), RestrictionKind.PROHIBITORY
+    )
+    graph = build_state_graph(grid_segments(), restrictions=[elsewhere])
+    assert not any(t.forbidden_by_restriction for t in graph.transitions)

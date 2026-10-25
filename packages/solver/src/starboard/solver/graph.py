@@ -56,6 +56,7 @@ class StreetSegment:
     speed_limit_kph: float | None = None
     road_class: str | None = None
     serviceable: bool = True
+    osm_way_ids: tuple[int, ...] = ()
 
     @property
     def is_one_way(self) -> bool:
@@ -74,6 +75,8 @@ class Transition:
 
     `heading_change_deg` is in (-180, 180]: positive is a right turn, negative
     a left turn, 0 straight on. A U-turn is a return along the same segment.
+    `forbidden_by_restriction` marks a turn a posted restriction prohibits
+    (no left turn, only straight on, and so on); the solver never takes it.
     """
 
     from_pass: Pass
@@ -81,6 +84,7 @@ class Transition:
     via_node: int
     heading_change_deg: float
     is_u_turn: bool
+    forbidden_by_restriction: bool = False
 
 
 @dataclass(frozen=True, slots=True)
