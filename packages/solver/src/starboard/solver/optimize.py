@@ -452,6 +452,8 @@ class _Sequence:
         for a, b in itertools.pairwise(sequence):
             self.forward.append(self.forward[-1] + costs.pair_ms[(a, b)])
             self.backward.append(self.backward[-1] + costs.pair_ms[(b, a)])
+        # links[k]: the cost of arriving at position k, from the yard at 0 and to the end at n.
+        self.links = [self.edge(self.at(k - 1), self.at(k)) for k in range(len(sequence) + 1)]
 
     def edge(self, a: Pass | None, b: Pass | None) -> int:
         """Cost of following `a` with `b`; None stands for the yard (start) or the end."""
@@ -469,56 +471,67 @@ class _Sequence:
 
     def two_opt_gain(self, i: int, j: int) -> int:
         """How much reversing passes[i..j] saves."""
-        before = self.edge(self.at(i - 1), self.at(i)) + self.edge(self.at(j), self.at(j + 1))
-        before += self.forward[j] - self.forward[i]
+        before = self.links[i] + self.links[j + 1] + self.forward[j] - self.forward[i]
         after = self.edge(self.at(i - 1), self.at(j)) + self.edge(self.at(i), self.at(j + 1))
         after += self.backward[j] - self.backward[i]
         return before - after
 
-    def or_opt_gain(self, i: int, length: int, gap: int) -> int:
+    def removal_gain(self, i: int, length: int) -> int:
+        """How much taking passes[i:i+length] out of the order, and closing the gap, saves."""
+        prev, after = self.at(i - 1), self.at(i + length)
+        return self.links[i] + self.links[i + length] - self.edge(prev, after)
+
+    def or_opt_gain(self, i: int, length: int, gap: int, removed: int | None = None) -> int:
         """How much moving passes[i:i+length] to sit just before passes[gap] saves.
 
         `gap` indexes the original order and lies outside the block; len(passes) means
-        moving it to the end.
+        moving it to the end. `removed` is `removal_gain(i, length)` when already known.
         """
         first, last = self.at(i), self.at(i + length - 1)
-        prev, after = self.at(i - 1), self.at(i + length)
         left, right = self.at(gap - 1), self.at(gap)
-        removed = self.edge(prev, first) + self.edge(last, after) - self.edge(prev, after)
-        added = self.edge(left, first) + self.edge(last, right) - self.edge(left, right)
+        if removed is None:
+            removed = self.removal_gain(i, length)
+        added = self.edge(left, first) + self.edge(last, right) - self.links[gap]
         return removed - added
 
 
-def _improving_move(costs: PlanCosts, plan: Plan, capacity: int | None) -> Plan | None:
-    """The first 2-opt or or-opt move whose best-unload plan beats `plan`, if any.
+def _improving_move(
+    costs: PlanCosts, plan: Plan, capacity: int | None, start: int = 0
+) -> tuple[Plan, int] | None:
+    """The first 2-opt or or-opt move whose best-unload plan beats `plan`, if any, and the
+    position it was found at.
 
-    With a capacity, a move that looks worse before unloads are placed can be better
-    after; on short orders every move is priced with its unloads, so the search
-    ends at a true local optimum there too.
+    Positions are scanned from `start` round to `start - 1`, so a search that keeps
+    finding moves does not rescan the start of the order each time. With a capacity,
+    a move that looks worse before unloads are placed can be better after; on short
+    orders every move is priced with its unloads, so the search ends at a true local
+    optimum there too.
     """
     order = _Sequence(costs, list(plan.sequence))
     n = len(order.passes)
     exact = capacity is None or n <= defaults.EXACT_MOVE_PRICING_MAX_PASSES.value
     floor = 0 if capacity is None or not exact else -INFEASIBLE_MS
-    for i in range(n):
+    for step in range(n):
+        i = (start + step) % n
         for j in range(i + 1, n):
             if order.two_opt_gain(i, j) > floor:
                 candidate = order.passes[:i] + order.passes[i : j + 1][::-1] + order.passes[j + 1 :]
                 trial = costs.best_unloads(candidate, capacity)
                 if trial.cost_ms < plan.cost_ms:
-                    return trial
+                    return trial, i
         for length in (1, 2, 3):
             if i + length > n:
                 break
+            removed = order.removal_gain(i, length)
             for gap in range(n + 1):
-                if i <= gap <= i + length or order.or_opt_gain(i, length, gap) <= floor:
+                if i <= gap <= i + length or order.or_opt_gain(i, length, gap, removed) <= floor:
                     continue
                 block = order.passes[i : i + length]
                 rest = order.passes[:i] + order.passes[i + length :]
                 at = gap if gap < i else gap - length
                 trial = costs.best_unloads(rest[:at] + block + rest[at:], capacity)
                 if trial.cost_ms < plan.cost_ms:
-                    return trial
+                    return trial, i
     return None
 
 
@@ -529,12 +542,14 @@ def improve_plan(costs: PlanCosts, plan: Plan, capacity: int | None) -> Plan:
     each improving candidate is then priced with its best unloads and kept only if
     that total is lower. With a capacity, orders of up to
     `defaults.EXACT_MOVE_PRICING_MAX_PASSES` passes price every move with its unloads.
+    After each move the scan carries on from where the move was found.
     """
+    start = 0
     for _ in range(round(defaults.LOCAL_SEARCH_MAX_ROUNDS.value)):
-        better = _improving_move(costs, plan, capacity)
-        if better is None:
+        found = _improving_move(costs, plan, capacity, start)
+        if found is None:
             break
-        plan = better
+        plan, start = found
     return plan
 
 
