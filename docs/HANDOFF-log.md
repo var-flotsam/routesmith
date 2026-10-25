@@ -90,3 +90,33 @@
 **Blocked**
 
 - Nothing.
+
+## 2026-10-25 (phase 3, single route)
+
+**Done**
+
+- #19: connection costs between passes and places (SciPy Dijkstra, integer ms).
+- #20: single-route optimizer on OR-Tools: required passes on the line graph,
+  disposal visits when full, 2-opt / or-opt, optimal unload placement.
+- #21: current route drives yard to yard and unloads when full.
+- #22: `starboard optimize`, `data/demo/route.json` (Holly Hill transfer
+  station as yard and disposal; 420 carts per load; 16 min per unload).
+- #23: fixes for 13 review findings; solution limit 1,000 from a 1,200-stop
+  benchmark (46 s).
+- #24: the demo's current order is a rear-loader route; Byram 68 km / 7.3 h
+  current against 39 km / 4.6 h optimized.
+
+**Next**
+
+- Multi-route steps from ADR-0003 (connection costs are done; street units
+  and the district partition next).
+- Speed up local search when OR-Tools is cut short (it can take most of the
+  three minutes on large routes).
+- Truck restrictions from OSM (`hgv=no`, `maxweight`); the Town restricts
+  trucks on St. Roch Avenue, which OSM does not tag.
+- The current route cannot turn round inside the yard or disposal site; the
+  optimized route can.
+
+**Blocked**
+
+- Nothing.
