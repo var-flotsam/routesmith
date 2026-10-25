@@ -5,7 +5,14 @@ import pytest
 from shapely import LineString
 
 from starboard.geo import osm
-from starboard.geo.osm import BoundingBox, fetch_network, parse_speed_kph, segments_from_osmnx
+from starboard.geo.osm import (
+    BoundingBox,
+    fetch_network,
+    parse_speed_kph,
+    restrictions_from_overpass,
+    segments_from_osmnx,
+)
+from starboard.geo.state_graph import RestrictionKind, TurnRestriction
 
 
 def osmnx_like_graph() -> nx.MultiDiGraph:
@@ -73,15 +80,58 @@ def test_network_is_fetched_once_then_read_from_cache(tmp_path, monkeypatch):
         (osm.ox.settings.cache_folder / "response.json").write_text(json.dumps(response))
         return osmnx_like_graph()
 
+    def fake_relations(bbox):
+        calls.append("relations")
+        return {"elements": [relation(1, "no_left_turn", from_way=100, via=2, to_way=200)]}
+
     monkeypatch.setattr(osm.ox, "graph_from_bbox", fake_fetch)
+    monkeypatch.setattr(osm, "_fetch_restriction_relations", fake_relations)
     bbox = BoundingBox(west=-73.001, south=40.999, east=-72.997, north=41.001)
 
     first = fetch_network(bbox, cache_dir=tmp_path)
     second = fetch_network(bbox, cache_dir=tmp_path)
 
-    assert len(calls) == 1
+    assert len(calls) == 2  # one network fetch, one restrictions fetch
+    assert [t for t in first.transitions if t.forbidden_by_restriction] == [
+        t for t in second.transitions if t.forbidden_by_restriction
+    ]
     assert first.osm_snapshot == second.osm_snapshot == "2026-10-24T09:00:00Z"
     assert sorted(first.segments) == sorted(second.segments)
-    sidecar = json.loads(next(tmp_path.glob("*.json")).read_text(encoding="utf-8"))
+    sidecar = json.loads((tmp_path / f"{bbox.cache_key()}.json").read_text(encoding="utf-8"))
     assert sidecar["osm_timestamp"] == "2026-10-24T09:00:00Z"
     assert sidecar["bbox"]["west"] == -73.001
+
+
+def relation(rid, value, *, from_way, via, to_way, via_type="node", tag="restriction"):
+    return {
+        "type": "relation",
+        "id": rid,
+        "tags": {"type": "restriction", tag: value},
+        "members": [
+            {"type": "way", "ref": from_way, "role": "from"},
+            {"type": via_type, "ref": via, "role": "via"},
+            {"type": "way", "ref": to_way, "role": "to"},
+        ],
+    }
+
+
+def test_restrictions_are_read_from_overpass_relations():
+    body = {
+        "elements": [
+            relation(1, "no_left_turn", from_way=10, via=5, to_way=11),
+            relation(2, "only_straight_on", from_way=12, via=6, to_way=13, tag="restriction:hgv"),
+            relation(3, "no_u_turn", from_way=14, via=99, to_way=14, via_type="way"),
+            relation(4, "give_way", from_way=15, via=7, to_way=16),
+        ]
+    }
+    restrictions, unsupported = restrictions_from_overpass(body)
+    assert restrictions == [
+        TurnRestriction(10, 5, 11, RestrictionKind.PROHIBITORY),
+        TurnRestriction(12, 6, 13, RestrictionKind.MANDATORY),
+    ]
+    assert unsupported == 2
+
+
+def test_segments_keep_their_osm_way_ids():
+    segments = {s.segment_id: s for s in segments_from_osmnx(osmnx_like_graph())}
+    assert segments["1-2-0"].osm_way_ids == (100,)

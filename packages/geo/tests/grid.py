@@ -2,7 +2,8 @@
 
 Rows run west to east and are numbered from the south; columns run south to
 north. Row 1 is one-way eastbound, row 2 one-way westbound; every other
-street is two-way.
+street is two-way. Each segment is its own OSM way, as at intersections in
+real OSM data: way `way_id(segment_id)`.
 """
 
 from starboard.geo.projection import LocalProjection
@@ -16,6 +17,11 @@ PROJECTION = LocalProjection(ORIGIN)
 
 def node(row: int, col: int) -> int:
     return row * SIZE + col
+
+
+def way_id(segment_id: str) -> int:
+    kind, row, col = segment_id.split("-")
+    return (1000 if kind == "h" else 2000) + int(row) * 10 + int(col)
 
 
 def at(x: float, y: float) -> LonLat:
@@ -39,6 +45,7 @@ def grid_segments() -> list[StreetSegment]:
                     name=f"Row {row} Street",
                     forward_allowed=row != 2,
                     reverse_allowed=row != 1,
+                    osm_way_ids=(way_id(f"h-{row}-{col}"),),
                 )
             )
     for col in range(SIZE):
@@ -56,6 +63,7 @@ def grid_segments() -> list[StreetSegment]:
                     name=f"Column {col} Avenue",
                     forward_allowed=True,
                     reverse_allowed=True,
+                    osm_way_ids=(way_id(f"v-{row}-{col}"),),
                 )
             )
     return segments
