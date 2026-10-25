@@ -30,6 +30,7 @@ from starboard.solver import defaults
 from starboard.solver.connections import allowed_transitions
 from starboard.solver.costs import drive_seconds, turn_seconds
 from starboard.solver.graph import Direction, Pass, SnappedStop, StateGraph, Transition
+from starboard.solver.route import DrivenRoute, Join, Pickup, Traversal
 from starboard.solver.rules import RoutingRules, u_turn_nodes
 from starboard.solver.street_names import normalized_street_name
 
@@ -38,47 +39,6 @@ _COST_TOLERANCE_S = 1e-6
 # Positions closer than this are the same point; absorbs floating-point error.
 _POSITION_TOLERANCE_M = 1e-6
 _START = "start"
-
-
-@dataclass(frozen=True, slots=True)
-class Traversal:
-    """Driving along one pass from `start_m` to `end_m`, measured in the pass's direction."""
-
-    on_pass: Pass
-    start_m: float
-    end_m: float
-    serviced_stop_ids: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class Pickup:
-    """One stop collected at `at_m` along `traversals[traversal_index]`."""
-
-    stop_id: str
-    traversal_index: int
-    at_m: float
-    wrong_side: bool
-
-
-@dataclass(frozen=True, slots=True)
-class DrivenRoute:
-    """Traversals in driving order; `transitions[i]` joins traversal i to traversal i + 1.
-
-    `pickups` are in the order the stops were collected. A stop collected in
-    passing belongs to the traversal it was passed on, so a traversal's
-    `serviced_stop_ids` are the stops collected along it. `u_turn_nodes` are
-    the nodes where the routing rules allowed a U-turn.
-    """
-
-    traversals: tuple[Traversal, ...]
-    transitions: tuple[Transition, ...]
-    pickups: tuple[Pickup, ...]
-    unreachable_stop_ids: tuple[str, ...]
-    u_turn_nodes: frozenset[int] = frozenset()
-
-    @property
-    def wrong_side_stop_ids(self) -> tuple[str, ...]:
-        return tuple(p.stop_id for p in self.pickups if p.wrong_side)
 
 
 @dataclass(frozen=True, slots=True)
@@ -259,7 +219,7 @@ def build_baseline(
     allowed_u_turns = u_turn_nodes(graph, stops, rules or RoutingRules())
     router = _Router(graph, allowed_u_turns)
     path: list[_Driven] = []
-    transitions: list[Transition] = []
+    joins: list[Join] = []
     pickups: list[Pickup] = []
     unreachable = [s.stop_id for s in stops if not router.passes_for(s)]
     reachable = [s for s in stops if router.passes_for(s)]
@@ -290,9 +250,9 @@ def build_baseline(
             else:
                 current.end_m = router.length(current.on_pass)
                 for transition in leg.transitions[:-1]:
-                    transitions.append(transition)
+                    joins.append(transition)
                     path.append(_Driven(transition.to_pass, 0.0, router.length(transition.to_pass)))
-                transitions.append(leg.transitions[-1])
+                joins.append(leg.transitions[-1])
                 path.append(_Driven(leg.target_pass, 0.0, leg.target_m))
                 index = len(path) - 1
             pickups.append(Pickup(stop.stop_id, index, leg.target_m, leg.wrong_side))
@@ -305,5 +265,5 @@ def build_baseline(
         for i, d in enumerate(path)
     )
     return DrivenRoute(
-        traversals, tuple(transitions), tuple(pickups), tuple(unreachable), allowed_u_turns
+        traversals, tuple(joins), tuple(pickups), tuple(unreachable), allowed_u_turns
     )

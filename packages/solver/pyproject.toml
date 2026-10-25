@@ -5,6 +5,7 @@ description = "Graph model, baseline, solver and scorecard (pure, no I/O)"
 requires-python = ">=3.12,<3.13"
 license = "FSL-1.1-ALv2"
 dependencies = [
+    "ortools>=9.10",
     "pydantic>=2.7",
     "scipy>=1.13",
 ]

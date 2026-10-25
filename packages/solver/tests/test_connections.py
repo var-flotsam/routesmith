@@ -12,11 +12,10 @@ from starboard.geo.synthetic import Grid
 from starboard.solver.connections import (
     UNREACHABLE,
     ConnectionCosts,
-    Place,
     traversal_ms,
     turn_ms,
 )
-from starboard.solver.graph import Direction, Pass, StateGraph
+from starboard.solver.graph import Direction, Pass, Place, StateGraph
 from starboard.solver.rules import RoutingRules, UTurnPolicy, u_turn_nodes
 
 

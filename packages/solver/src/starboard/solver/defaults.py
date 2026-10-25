@@ -197,6 +197,61 @@ U_TURN_DENSITY_WINDOW = Tunable(
 )
 
 
+# The optimizer (packages/solver)
+
+DISPOSAL_UNLOAD_TIME = Tunable(
+    value=0.0,
+    unit="s",
+    reason="PLACEHOLDER pending a public figure: time at the disposal site per visit.",
+)
+
+SOLVER_SOLUTION_LIMIT = Tunable(
+    value=2000.0,
+    unit="solutions",
+    reason=(
+        "OR-Tools stops after this many solutions, so the same input always gives the same "
+        "route on any machine (a wall-clock limit would not). Set from the benchmark so a "
+        "1,200-stop route finishes well inside three minutes."
+    ),
+)
+
+SOLVER_TIME_LIMIT = Tunable(
+    value=180.0,
+    unit="s",
+    reason=(
+        "Safety ceiling for one route's search, matching the three-minute target in "
+        "HANDOFF.md section 2.1; the solution limit normally stops the search first."
+    ),
+)
+
+LOCAL_SEARCH_MAX_ROUNDS = Tunable(
+    value=200.0,
+    unit="rounds",
+    reason="Most improving moves the 2-opt / or-opt pass makes after OR-Tools; it stops sooner "
+    "when no move improves.",
+)
+
+SPARE_DISPOSAL_VISITS = Tunable(
+    value=2.0,
+    unit="visits",
+    reason=(
+        "Optional disposal visits offered to OR-Tools beyond the fewest the carts need, so an "
+        "order whose loads pack less tightly still has a place to unload."
+    ),
+)
+
+DURATION_EXCESS_COST = Tunable(
+    value=100.0,
+    unit="ms of cost per ms over",
+    reason=(
+        "Weight on time beyond the truck's maximum route duration, large enough to dominate "
+        "drive time so the search keeps routes within the limit when it can; the OR-Tools VRP "
+        "guide uses 100 for its span weight."
+    ),
+    source="https://developers.google.com/optimization/routing/vrp",
+)
+
+
 def all_tunables() -> dict[str, Tunable]:
     """Every module-level `Tunable` in this file, keyed by name."""
     found: dict[str, Tunable] = {}

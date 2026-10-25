@@ -50,9 +50,16 @@ mypy_path = ["packages/solver/src", "packages/geo/src", "packages/export/src", "
 namespace_packages = true
 explicit_package_bases = true
 
+# OR-Tools ships no type information; its calls are confined to solver/optimize.py.
+[[tool.mypy.overrides]]
+module = ["ortools.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["packages", "apps"]
 addopts = ["--import-mode=importlib", "--strict-markers"]
+# OR-Tools' SWIG bindings warn on import under Python 3.12; nothing to act on here.
+filterwarnings = ["ignore:builtin type [Ss]wig.*:DeprecationWarning"]
 markers = [
   "property: hypothesis property tests of the solver's hard constraints",
   "demo: tests that need the demo town's OSM network (fetched once into cache/)",

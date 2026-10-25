@@ -3,8 +3,8 @@
 The current-route baseline is held to the driving constraints every route
 must meet: no travel against a one-way, no restricted turn, and no U-turn
 the routing rules forbid. Every expected value here is worked out from the
-graph and stops directly, not by calling the code under test. Solver output
-joins these tests in phase 3.
+graph and stops directly, not by calling the code under test. The optimized
+route is held to all four hard constraints of CLAUDE.md.
 """
 
 import math
@@ -19,8 +19,18 @@ from starboard.geo.snapping import Snapper, StopPoint
 from starboard.geo.state_graph import RestrictionKind, TurnRestriction, build_state_graph
 from starboard.geo.synthetic import Grid
 from starboard.solver import defaults
-from starboard.solver.baseline import DrivenRoute, build_baseline
-from starboard.solver.graph import Direction, LonLat, Pass, SnappedStop, StateGraph, StreetSegment
+from starboard.solver.baseline import build_baseline
+from starboard.solver.graph import (
+    Direction,
+    LonLat,
+    Pass,
+    Place,
+    SnappedStop,
+    StateGraph,
+    StreetSegment,
+)
+from starboard.solver.optimize import RouteSites, SolveSettings, TruckProfile, optimize
+from starboard.solver.route import DrivenRoute, PlaceVisit
 from starboard.solver.rules import RoutingRules, UTurnPolicy
 from starboard.solver.scorecard import score
 
@@ -161,7 +171,8 @@ def test_the_baseline_drives_only_legal_passes_and_turns(scenario):
     passes = set(graph.passes)
     transitions = set(graph.transitions)
 
-    assert len(route.transitions) == max(len(route.traversals) - 1, 0)
+    assert len(route.joins) == max(len(route.traversals) - 1, 0)
+    assert route.joins == route.transitions  # the current route visits no place
     for traversal in route.traversals:
         assert traversal.on_pass in passes  # never against a one-way
         length = graph.segments[traversal.on_pass.segment_id].length_m
@@ -288,3 +299,139 @@ def test_route_time_is_driving_plus_collection_plus_wrong_side_extra(scenario):
     assert card.route_time_s == pytest.approx(
         card.drive_time_s + card.service_time_s + card.wrong_side_time_s
     )
+
+
+# The optimized route: invariants 1 to 4 (CLAUDE.md) on every route the solver returns.
+
+TEST_SOLUTION_LIMIT = 40  # a small search keeps each example quick; the invariants hold at any size
+
+
+@st.composite
+def routing_problems(draw: st.DrawFn) -> tuple[Scenario, RouteSites, TruckProfile]:
+    scenario = draw(scenarios())
+    nodes = sorted({n for s in scenario.graph.segments.values() for n in (s.from_node, s.to_node)})
+    yard = Place("yard", draw(st.sampled_from(nodes)))
+    disposal = Place("disposal", draw(st.sampled_from(nodes)))
+    capacity = draw(st.none() | st.integers(1, 8))
+    return scenario, RouteSites(yard, disposal), TruckProfile(capacity_carts=capacity)
+
+
+def _settings(scenario: Scenario, profile: TruckProfile) -> SolveSettings:
+    return SolveSettings(profile, scenario.rules, TEST_SOLUTION_LIMIT)
+
+
+def _yard_reachable_from_disposal(scenario: Scenario, sites: RouteSites) -> bool:
+    """Worked out from scratch: some legal drive leads from the disposal site to the yard."""
+    graph = scenario.graph
+    if sites.disposal.node == sites.yard.node:
+        return True
+    starts = [p for p in graph.passes if _pass_ends(graph, p)[0] == sites.disposal.node]
+    seen = set(starts)
+    for p in starts:
+        seen |= _reachable_after(scenario, p)
+    return any(_pass_ends(graph, p)[1] == sites.yard.node for p in seen)
+
+
+def _solve(scenario: Scenario, sites: RouteSites, profile: TruckProfile):
+    """The optimized route, or None when the sites leave no way back to the yard."""
+    try:
+        return optimize(scenario.graph, scenario.stops, sites, _settings(scenario, profile))
+    except ValueError:
+        assert not _yard_reachable_from_disposal(scenario, sites)
+        return None
+
+
+def _pass_ends(graph: StateGraph, p: Pass) -> tuple[int, int]:
+    s = graph.segments[p.segment_id]
+    return (
+        (s.from_node, s.to_node) if p.direction is Direction.FORWARD else (s.to_node, s.from_node)
+    )
+
+
+@given(routing_problems())
+def test_every_optimized_route_meets_the_hard_constraints(problem):
+    scenario, sites, profile = problem
+    graph, stops = scenario.graph, scenario.stops
+    result = _solve(scenario, sites, profile)
+    if result is None:
+        return
+    route = result.route
+    by_id = {s.stop_id: s for s in stops}
+    unserved = {u.stop_id for u in result.unserved}
+    passes = set(graph.passes)
+    transitions = set(graph.transitions)
+
+    # Every servable stop is collected exactly once.
+    picked = [p.stop_id for p in route.pickups]
+    assert len(picked) == len(set(picked))
+    assert set(picked) | unserved == set(by_id)
+    assert not set(picked) & unserved
+
+    # 1. Every serviced cart is on the truck's right at the moment of service.
+    for pickup in route.pickups:
+        traversal = route.traversals[pickup.traversal_index]
+        assert not pickup.wrong_side
+        assert traversal.on_pass == by_id[pickup.stop_id].required_pass
+
+    # 2. No travel against a one-way. 3. No U-turn or restricted turn the rules forbid.
+    assert len(route.joins) == max(len(route.traversals) - 1, 0)
+    for traversal in route.traversals:
+        assert traversal.on_pass in passes
+        length = graph.segments[traversal.on_pass.segment_id].length_m
+        assert traversal.start_m == 0.0 and traversal.end_m == pytest.approx(length)
+    for index, join in enumerate(route.joins):
+        before, after = route.traversals[index].on_pass, route.traversals[index + 1].on_pass
+        if isinstance(join, PlaceVisit):
+            assert _pass_ends(graph, before)[1] == join.place.node
+            assert _pass_ends(graph, after)[0] == join.place.node
+            continue
+        assert join in transitions
+        assert not join.forbidden_by_restriction
+        if join.is_u_turn:
+            assert allowed_u_turn(scenario, join.via_node)
+        assert (join.from_pass, join.to_pass) == (before, after)
+
+    # 4. Starts at the yard, unloads before the end and whenever the next pass would
+    # overfill the truck, and ends at the yard.
+    if not route.pickups:
+        return
+    assert route.start == sites.yard and route.end == sites.yard
+    assert _pass_ends(graph, route.traversals[0].on_pass)[0] == sites.yard.node
+    if route.closing_visits:
+        assert sites.disposal.node == sites.yard.node
+        assert _pass_ends(graph, route.traversals[-1].on_pass)[1] == sites.disposal.node
+    else:
+        assert _pass_ends(graph, route.traversals[-1].on_pass)[1] == sites.yard.node
+    unload_points = [i for i, j in enumerate(route.joins) if isinstance(j, PlaceVisit) and j.unload]
+    unload_points += [len(route.traversals) - 1] * sum(v.unload for v in route.closing_visits)
+    assert unload_points, "the route never visits the disposal site"
+    assert max(p.traversal_index for p in route.pickups) <= max(unload_points)
+    load = 0
+    unloads_after = sorted(unload_points)
+    for index, traversal in enumerate(route.traversals):
+        load += len(traversal.serviced_stop_ids)
+        if profile.capacity_carts is not None:
+            assert load <= profile.capacity_carts
+        while unloads_after and unloads_after[0] == index:
+            load = 0
+            unloads_after.pop(0)
+
+
+@given(routing_problems())
+def test_the_plan_cost_is_the_scorecard_route_time(problem):
+    scenario, sites, profile = problem
+    result = _solve(scenario, sites, profile)
+    if result is None:
+        return
+    card = score(scenario.graph, result.route)
+    assert card.wrong_side_pickups == 0
+    assert card.route_time_s == pytest.approx(
+        result.plan.cost_ms / 1000, abs=0.01 * max(1, len(result.route.traversals))
+    )
+
+
+@given(routing_problems())
+def test_the_same_input_gives_the_same_route(problem):
+    scenario, sites, profile = problem
+    first, second = (_solve(scenario, sites, profile) for _ in range(2))
+    assert first == second
