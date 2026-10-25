@@ -98,10 +98,12 @@ def segments_from_osmnx(graph: nx.MultiDiGraph[Any]) -> list[StreetSegment]:
     becomes one segment allowing both directions.
     """
     segments: dict[str, StreetSegment] = {}
-    by_shape: dict[tuple[frozenset[int], str, float], str] = {}
+    # OSMnx lists merged way ids in an order that can differ between a street's
+    # two directions, so the ids are compared as a sorted tuple.
+    by_shape: dict[tuple[frozenset[int], tuple[int, ...], float], str] = {}
     for u, v, key, data in sorted(graph.edges(keys=True, data=True), key=lambda e: e[:3]):
         geometry = _edge_geometry(graph, u, v, data)
-        shape = (frozenset((u, v)), str(data.get("osmid")), round(float(data["length"]), 1))
+        shape = (frozenset((u, v)), _way_ids(data.get("osmid")), round(float(data["length"]), 1))
         existing_id = by_shape.get(shape)
         if existing_id is not None:
             existing = segments[existing_id]
@@ -265,10 +267,16 @@ def fetch_network(
     restrictions, _ = restrictions_from_overpass(
         json.loads(restrictions_file.read_text(encoding="utf-8"))
     )
+    outside = frozenset(
+        int(node)
+        for node, data in graph.nodes(data=True)
+        if not (bbox.west <= data["x"] <= bbox.east and bbox.south <= data["y"] <= bbox.north)
+    )
     return build_state_graph(
         segments_from_osmnx(graph),
         osm_snapshot=snapshot.get("osm_timestamp") or snapshot.get("fetched_at"),
         restrictions=restrictions,
+        cut_off_nodes=outside,
     )
 
 

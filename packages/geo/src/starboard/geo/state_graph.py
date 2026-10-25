@@ -68,8 +68,12 @@ def build_state_graph(
     segments: Iterable[StreetSegment],
     osm_snapshot: str | None = None,
     restrictions: Iterable[TurnRestriction] = (),
+    cut_off_nodes: frozenset[int] = frozenset(),
 ) -> StateGraph:
     """Every legal pass, and every transition between passes that meet at a node.
+
+    `cut_off_nodes` are where the fetched area cuts streets off; a node there
+    with one segment is the edge of the data, not a dead end.
 
     Transitions a posted restriction forbids are kept and marked, so the
     scorecard can count a current route that takes one. U-turns are flagged
@@ -139,6 +143,10 @@ def build_state_graph(
         segments=by_id,
         passes=tuple(passes),
         transitions=tuple(transitions),
-        dead_end_nodes=frozenset(node for node, count in endpoint_count.items() if count == 1),
+        dead_end_nodes=frozenset(
+            node
+            for node, count in endpoint_count.items()
+            if count == 1 and node not in cut_off_nodes
+        ),
         osm_snapshot=osm_snapshot,
     )

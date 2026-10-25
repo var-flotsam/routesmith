@@ -114,3 +114,18 @@ def test_a_restriction_at_another_node_changes_nothing():
     )
     graph = build_state_graph(grid_segments(), restrictions=[elsewhere])
     assert not any(t.forbidden_by_restriction for t in graph.transitions)
+
+
+def test_cut_off_nodes_are_not_dead_ends():
+    stub = StreetSegment(
+        segment_id="stub",
+        from_node=node(0, 0),
+        to_node=999,
+        geometry=(at(0, 0), at(0, -BLOCK_M)),
+        length_m=BLOCK_M,
+        name="Edge Road",
+        forward_allowed=True,
+        reverse_allowed=True,
+    )
+    graph = build_state_graph([*grid_segments(), stub], cut_off_nodes=frozenset({999}))
+    assert graph.dead_end_nodes == frozenset()

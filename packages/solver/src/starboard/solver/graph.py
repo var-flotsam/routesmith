@@ -92,7 +92,8 @@ class StateGraph:
     """Every legal pass and every transition between passes.
 
     `dead_end_nodes` are nodes touched by a single segment, where a U-turn is
-    always allowed. `osm_snapshot` records the OSM data timestamp the network
+    always allowed; a node where the network was cut off at the edge of the
+    fetched area is not one. `osm_snapshot` records the OSM data timestamp the network
     was built from, or `None` for synthetic networks.
     """
 
