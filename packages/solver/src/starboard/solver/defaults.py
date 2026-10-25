@@ -197,12 +197,28 @@ U_TURN_DENSITY_WINDOW = Tunable(
 )
 
 
+SITE_MAX_DISTANCE = Tunable(
+    value=500.0,
+    unit="m",
+    reason=(
+        "A yard or disposal site sits off-street, behind a gate; its nearest street node is "
+        "seldom more than a few hundred metres away, so a site farther than this is outside "
+        "the fetched network and is refused rather than joined to the wrong street."
+    ),
+)
+
+
 # The optimizer (packages/solver)
 
 DISPOSAL_UNLOAD_TIME = Tunable(
-    value=0.0,
+    value=660.0,
     unit="s",
-    reason="PLACEHOLDER pending a public figure: time at the disposal site per visit.",
+    reason=(
+        "Time at the disposal site per visit: measured at 11 minutes on average to unload at a "
+        "transfer station (Jaunich et al. 2016, Resources, Conservation & Recycling 114:92-102, "
+        "abstract; landfills took 14-22 minutes)."
+    ),
+    source="https://doi.org/10.1016/j.resconrec.2016.07.012",
 )
 
 SOLVER_SOLUTION_LIMIT = Tunable(

@@ -41,3 +41,30 @@ def test_score_reports_a_network_failure_without_a_traceback(tmp_path, monkeypat
     monkeypatch.setattr(cli, "fetch_network", unreachable)
     assert cli.main(["score", str(stops_csv(tmp_path))]) == 2
     assert "could not fetch the OSM street network" in capsys.readouterr().err
+
+
+def test_optimize_compares_current_and_optimized(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(
+        cli, "fetch_network", lambda bbox, cache_dir, extract: build_state_graph(GRID.segments())
+    )
+    yard, disposal = GRID.at(0, 0), GRID.at(300, 300)
+    args = [
+        "optimize",
+        str(stops_csv(tmp_path)),
+        f"--yard={yard.lon},{yard.lat}",  # "=" because a negative longitude looks like a flag
+        f"--disposal={disposal.lon},{disposal.lat}",
+        "--capacity",
+        "2",
+        "--json",
+    ]
+    assert cli.main(args) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["optimized"]["wrong_side_pickups"] == 0
+    assert report["optimized"]["stops_serviced"] == report["current"]["stops_serviced"] == 4
+    assert report["optimized"]["disposal_visits"] >= 2
+    assert sorted(report["optimized_order"]) == ["s1", "s2", "s3", "s4"]
+
+
+def test_optimize_needs_both_sites(tmp_path, capsys):
+    assert cli.main(["optimize", str(stops_csv(tmp_path))]) == 1
+    assert "needs --yard and --disposal" in capsys.readouterr().err
