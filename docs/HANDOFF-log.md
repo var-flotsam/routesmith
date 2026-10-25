@@ -31,6 +31,35 @@
 
 **Blocked**
 
-- Pushing `main` and opening PRs: waiting on the owner.
-- CI needs a `BANNED_TERMS` repository secret holding the term list; the
-  owner adds it.
+- (Resolved the same day: `main` pushed, `BANNED_TERMS` secret added, PRs
+  #1 to #6 landed on `main` through #7.)
+
+## 2026-10-25
+
+**Done (phase 2, PRs #8 to #13)**
+
+- #8: motorways and their ramps are drivable but never snap candidates (8
+  demo stops had snapped to I-95 ramps).
+- #9: OSM turn restrictions through a node mark forbidden transitions;
+  through-way restrictions are counted, not applied.
+- #10: cost model (OSRM car-profile speeds and turn costs), current-route
+  baseline with facing direction and wrong-side pickups, scorecard, and
+  property tests on random grids in `packages/solver/tests/test_properties.py`.
+- #11: `starboard-cli` in `apps/cli` (ADR-0002) with `starboard score`.
+- #12: ADR-0001 for the licence.
+
+**Next (phase 3)**
+
+- Required-arc model on the line graph with OR-Tools, warm-started from the
+  baseline order; local search; `starboard optimize`.
+- Yard and disposal sites on a route (start, end, capacity), for both the
+  baseline and the solver.
+- Divided roads: 19 demo stops are on the left of a one-way, some likely
+  one carriageway of a two-carriageway street; snap them to the other
+  carriageway when it has the same name.
+
+**Blocked**
+
+- Demo-town tests (`pytest -m demo`) and `starboard score data/demo/stops.csv`
+  have not run since #8: the public Overpass server stopped answering this
+  machine. Re-run both once it answers.
