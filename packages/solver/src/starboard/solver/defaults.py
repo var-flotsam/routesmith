@@ -285,6 +285,37 @@ BALANCE_MARGIN = Tunable(
 )
 
 
+PARTITION_RECENTRING_ROUNDS = Tunable(
+    value=3.0,
+    unit="rounds",
+    reason="Times each seed moves to its district's medoid and the districts grow again; it "
+    "stops sooner when no seed moves.",
+)
+
+PARTITION_REFINEMENT_PASSES = Tunable(
+    value=20.0,
+    unit="passes",
+    reason="Most sweeps over boundary units during refinement; it stops sooner when a sweep "
+    "moves nothing.",
+)
+
+BOUNDARY_CUT_COST = Tunable(
+    value=30.0,
+    unit="s per cut",
+    reason=(
+        "Charged in the partition score for each pair of adjacent residential units in "
+        "different districts, so boundaries fall on busy roads drivers read as edges."
+    ),
+)
+
+COMPACTNESS_WEIGHT = Tunable(
+    value=0.1,
+    unit="fraction",
+    reason="Weight on each district's spread around its medoid, so districts are compact "
+    "rather than long and thin.",
+)
+
+
 def all_tunables() -> dict[str, Tunable]:
     """Every module-level `Tunable` in this file, keyed by name."""
     found: dict[str, Tunable] = {}
