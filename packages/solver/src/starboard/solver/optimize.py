@@ -58,11 +58,14 @@ class SolveSettings:
     """How to solve: the truck, the routing rules, and the search size.
 
     `solution_limit` overrides `defaults.SOLVER_SOLUTION_LIMIT`, for tests.
+    `u_turns_at` gives the nodes where U-turns are allowed when they were worked
+    out for a whole area, so a district judges low density on every stop.
     """
 
     profile: TruckProfile = field(default_factory=TruckProfile)
     rules: RoutingRules = field(default_factory=RoutingRules)
     solution_limit: int | None = None
+    u_turns_at: frozenset[int] | None = None
 
 
 class UnservedReason(StrEnum):
@@ -600,9 +603,10 @@ class _Expansion:
         )
 
 
-def _unservable(
+def unservable_reason(
     connections: ConnectionCosts, sites: RouteSites, profile: TruckProfile, p: Pass, carts: int
 ) -> UnservedReason | None:
+    """Why no route can serve pass `p`, or None; `p` and both sites must be in `connections`."""
     if connections.from_place(sites.yard, p) == UNREACHABLE:
         return UnservedReason.UNREACHABLE_FROM_YARD
     if connections.to_place(p, sites.disposal) == UNREACHABLE:
@@ -647,7 +651,9 @@ def optimize(
     """
     settings = settings or SolveSettings()
     profile = settings.profile
-    allowed_u_turns = u_turn_nodes(graph, stops, settings.rules)
+    allowed_u_turns = settings.u_turns_at
+    if allowed_u_turns is None:
+        allowed_u_turns = u_turn_nodes(graph, stops, settings.rules)
     stops_on, unserved = _required_passes(graph, stops)
     connections = ConnectionCosts(graph, allowed_u_turns, stops_on, [sites.yard, sites.disposal])
     if connections.between_places(sites.disposal, sites.yard) == UNREACHABLE:
@@ -655,7 +661,7 @@ def optimize(
 
     # Passes the truck cannot reach, leave, or fit in one load go to review.
     for p in sorted(stops_on, key=_pass_key):
-        reason = _unservable(connections, sites, profile, p, len(stops_on[p]))
+        reason = unservable_reason(connections, sites, profile, p, len(stops_on[p]))
         if reason is not None:
             unserved.extend(UnservedStop(s.stop_id, reason) for s in stops_on.pop(p))
     for p in _overflowing_first_load(connections, sites, stops_on, profile.capacity_carts):
