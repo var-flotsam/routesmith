@@ -34,15 +34,26 @@ OpenAddresses' processed downloads require an account.
    removing the parenthesised community tags some names carry.
 4. Keeps one point per house number and street, rounded to 6 decimal places.
 5. Sorts by street name, then house number, and numbers the stops in that
-   order. This `current_sequence` is synthetic: it imitates how route sheets
-   are commonly ordered and does not describe any real collection route.
+   order (`alphabetical_sequence`).
+
+`scripts/build_demo_current_order.py` then sets `current_sequence` to a
+well-drawn rear-loader route, the kind the demo's buyer still runs: each
+street with carts is driven once, in the direction that has more of its carts
+on the right (the only direction on a one-way), and the solver orders those
+streets from the yard in `route.json` to the disposal site and back, as a
+crew collecting both curbs would drive them. Stops in review are numbered
+last, in street order. No public dataset gives a real route's stop order, so
+this order is synthetic too; it is a strong current route, so the saving
+the demo shows is a conservative one. It was built from the 2026-10-23
+Geofabrik extract.
 
 ## Columns
 
 | Column | Meaning |
 | --- | --- |
 | `stop_id` | `demo-NNNN`, stable for this file |
-| `current_sequence` | synthetic current order, 1 to 754 |
+| `current_sequence` | the rear-loader route's order, 1 to 754 (see above) |
+| `alphabetical_sequence` | street name, then house number, 1 to 754 |
 | `house_number` | house number with any suffix |
 | `street` | street name as built in step 3 |
 | `lon`, `lat` | WGS 84 degrees |
