@@ -46,3 +46,15 @@ OpenAddresses' processed downloads require an account.
 | `house_number` | house number with any suffix |
 | `street` | street name as built in step 3 |
 | `lon`, `lat` | WGS 84 degrees |
+
+## `route.json`: demo yard, disposal site and truck
+
+| Field | Value | Source |
+| --- | --- | --- |
+| `disposal` | Holly Hill Lane at the Holly Hill Resource Recovery Facility, the Town of Greenwich's transfer station (99 Holly Hill Lane). The point is on the lane itself (Nominatim's point for OSM way 10184467), so it joins the street network there rather than at a nearby road. | https://www.greenwichct.gov/269/Trash, https://www.openstreetmap.org/way/1497813525 |
+| `yard` | The same point. The Town does not collect household garbage ("The Town of Greenwich is not responsible for any household garbage collection") and names no truck yard, so the demo assumes the trucks start and end at the transfer station. | https://www.greenwichct.gov/m/faq?cat=30 |
+| `capacity_carts` | 420 carts per load: an automated side-loader on a residential route carried loads of 428 and 498 carts (Heil RevAMP case study, 2025, "Summary of Key Observed Metrics"), and 420 per dump is given as typical for an automated route (Route Optimization Consultants, "Units per Dump"). | https://www.heil.com/wp-content/uploads/2024/06/Heil-RevAMP-Case-Study-2025.pdf, https://routeoptimizationconsultants.com/waste-collection-route-kpi/ |
+
+The Town's directions say trucks over 6,000 lb may not use St. Roch Avenue to
+reach Holly Hill Lane (https://www.greenwichct.gov/DocumentCenter/View/557/Directions-to-Holly-Hill-PDF).
+OSM does not tag that restriction, so the demo network does not apply it.
