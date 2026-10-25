@@ -16,8 +16,10 @@ driven (the last `defaults.PASS_BY_DISTANCE` of its path, either curb,
 across intersections too) is collected as the truck passes it. Where two
 choices cost the same, the right side wins, then no driving, then list order.
 
-The route starts at the first stop and ends at the last; yard and disposal
-legs are added once routes carry them.
+With route sites, the truck leaves the yard, drives to the disposal site
+whenever the next cart would overfill it and once more at the end, and
+returns to the yard, the same legs the optimized route drives. Without
+them the route starts at the first stop and ends at the last.
 """
 
 import heapq
@@ -30,7 +32,15 @@ from starboard.solver import defaults
 from starboard.solver.connections import allowed_transitions
 from starboard.solver.costs import drive_seconds, turn_seconds
 from starboard.solver.graph import Direction, Pass, SnappedStop, StateGraph, Transition
-from starboard.solver.route import DrivenRoute, Join, Pickup, Traversal
+from starboard.solver.route import (
+    DrivenRoute,
+    Join,
+    Pickup,
+    PlaceVisit,
+    RouteSites,
+    Traversal,
+    TruckProfile,
+)
 from starboard.solver.rules import RoutingRules, u_turn_nodes
 from starboard.solver.street_names import normalized_street_name
 
@@ -38,16 +48,16 @@ from starboard.solver.street_names import normalized_street_name
 _COST_TOLERANCE_S = 1e-6
 # Positions closer than this are the same point; absorbs floating-point error.
 _POSITION_TOLERANCE_M = 1e-6
-_START = "start"
 
 
 @dataclass(frozen=True, slots=True)
 class _Leg:
-    """One way to collect `stops[stop_index]`.
+    """One way to reach `target_m` on `target_pass`, collecting `stops[stop_index]` there.
 
-    Either drive `transitions` and stop at `target_m` on `target_pass`, or,
-    with `path_index` set and no transitions, collect it where the truck
-    already passed it, at `target_m` along `path[path_index]`.
+    The truck drives `transitions`, starting from `origin` (the pass it starts on
+    when leaving a place) or from where it is. With `path_index` set and no
+    transitions, the stop is collected where the truck already passed it, along
+    `path[path_index]`.
     """
 
     cost_s: float
@@ -57,6 +67,7 @@ class _Leg:
     stop_index: int
     wrong_side: bool
     path_index: int | None = None
+    origin: Pass | None = None
 
 
 def _choice_key(leg: _Leg) -> tuple[int, bool, bool, int]:
@@ -64,7 +75,7 @@ def _choice_key(leg: _Leg) -> tuple[int, bool, bool, int]:
     return (
         round(leg.cost_s / _COST_TOLERANCE_S),
         leg.wrong_side,
-        bool(leg.transitions),
+        bool(leg.transitions) or leg.origin is not None,
         leg.stop_index,
     )
 
@@ -82,6 +93,16 @@ class _Driven:
     end_m: float
 
 
+@dataclass(frozen=True, slots=True)
+class _Seed:
+    """Where a search starts: on `on_pass` at `at_m`, having spent `cost_s` already."""
+
+    on_pass: Pass
+    at_m: float
+    cost_s: float
+    from_place: bool
+
+
 class _Router:
     def __init__(self, graph: StateGraph, u_turns_at: frozenset[int]) -> None:
         self._graph = graph
@@ -89,6 +110,35 @@ class _Router:
         for transition in allowed_transitions(graph, u_turns_at):
             self._outgoing[transition.from_pass].append(transition)
         self._passes = frozenset(graph.passes)
+        self._starting_at: dict[int, list[Pass]] = defaultdict(list)
+        self._ending_at: dict[int, list[Pass]] = defaultdict(list)
+        for p in sorted(graph.passes, key=lambda q: (q.segment_id, q.direction.value)):
+            start, end = self.ends(p)
+            self._starting_at[start].append(p)
+            self._ending_at[end].append(p)
+        self._usable: frozenset[Pass] = self._passes
+
+    def keep_within_reach_of(self, node: int) -> None:
+        """Use only passes from which `node` can still be reached, so the truck is never
+        trapped short of the disposal site."""
+        incoming: dict[Pass, list[Pass]] = defaultdict(list)
+        for from_pass, transitions in self._outgoing.items():
+            for t in transitions:
+                incoming[t.to_pass].append(from_pass)
+        reach = set(self._ending_at[node])
+        frontier = list(reach)
+        while frontier:
+            for before in incoming[frontier.pop()]:
+                if before not in reach:
+                    reach.add(before)
+                    frontier.append(before)
+        self._usable = frozenset(reach)
+
+    def ends(self, on_pass: Pass) -> tuple[int, int]:
+        segment = self._graph.segments[on_pass.segment_id]
+        if on_pass.direction is Direction.FORWARD:
+            return segment.from_node, segment.to_node
+        return segment.to_node, segment.from_node
 
     def length(self, on_pass: Pass) -> float:
         return self._graph.segments[on_pass.segment_id].length_m
@@ -102,46 +152,72 @@ class _Router:
 
     def passes_for(self, stop: SnappedStop) -> list[Pass]:
         candidates = [Pass(stop.segment_id, d) for d in (Direction.FORWARD, Direction.REVERSE)]
-        return [p for p in candidates if p in self._passes]
+        return [p for p in candidates if p in self._usable]
 
-    def nearest(self, from_pass: Pass, from_m: float, stops: Sequence[SnappedStop]) -> _Leg | None:
-        """The quickest legal way from a point on `from_pass` to collecting one of `stops`."""
-        targets: dict[Pass, list[tuple[int, float]]] = defaultdict(list)
+    def seeds_at(self, node: int) -> list[_Seed]:
+        """Leaving a place at `node`: the start of every pass that begins there."""
+        return [_Seed(p, 0.0, 0.0, True) for p in self._starting_at[node] if p in self._usable]
+
+    def nearest(self, seeds: Sequence[_Seed], stops: Sequence[SnappedStop]) -> _Leg | None:
+        """The quickest legal way from `seeds` to collecting one of `stops`."""
+        targets: dict[Pass, list[tuple[int, float, bool]]] = defaultdict(list)
         for index, stop in enumerate(stops):
             for on_pass in self.passes_for(stop):
-                targets[on_pass].append((index, self.position(on_pass, stop)))
+                wrong_side = on_pass != stop.required_pass
+                targets[on_pass].append((index, self.position(on_pass, stop), wrong_side))
+        return self._search(seeds, targets)
+
+    def to_node(self, seeds: Sequence[_Seed], node: int) -> _Leg | None:
+        """The quickest legal way from `seeds` to the end of a pass that ends at `node`."""
+        targets = {p: [(0, self.length(p), False)] for p in self._ending_at[node]}
+        return self._search(seeds, targets)
+
+    def _search(
+        self, seeds: Sequence[_Seed], targets: dict[Pass, list[tuple[int, float, bool]]]
+    ) -> _Leg | None:
         best: _Leg | None = None
 
-        def arrive_on(on_pass: Pass, entry_s: float, path: tuple[Transition, ...]) -> None:
+        def arrive(
+            on_pass: Pass,
+            start_m: float,
+            entry_s: float,
+            route: tuple[tuple[Transition, ...], Pass | None],
+        ) -> None:
             nonlocal best
-            start_m = 0.0 if path else from_m
-            for index, at_m in targets.get(on_pass, ()):
-                if at_m < start_m:
+            path, origin = route
+            for index, at_m, wrong_side in targets.get(on_pass, ()):
+                if at_m < start_m - _POSITION_TOLERANCE_M:
                     continue
-                wrong_side = on_pass != stops[index].required_pass
-                cost = entry_s + self.seconds(on_pass, at_m - start_m)
+                cost = entry_s + self.seconds(on_pass, max(at_m - start_m, 0.0))
                 if wrong_side:
                     cost += defaults.WRONG_SIDE_PICKUP_TIME.value
-                candidate = _Leg(cost, path, on_pass, at_m, index, wrong_side)
+                candidate = _Leg(cost, path, on_pass, at_m, index, wrong_side, origin=origin)
                 if _better(candidate, best):
                     best = candidate
 
-        arrive_on(from_pass, 0.0, ())
-
-        remaining = self.seconds(from_pass, self.length(from_pass) - from_m)
         order = itertools.count()
         best_entry: dict[Pass, float] = {}
-        previous: dict[Pass, tuple[Pass | str, Transition]] = {}
+        previous: dict[Pass, tuple[Pass | _Seed, Transition | None]] = {}
         heap: list[tuple[float, int, Pass]] = []
 
-        def push(transition: Transition, entry_s: float, before: Pass | str) -> None:
-            if entry_s < best_entry.get(transition.to_pass, float("inf")):
-                best_entry[transition.to_pass] = entry_s
-                previous[transition.to_pass] = (before, transition)
-                heapq.heappush(heap, (entry_s, next(order), transition.to_pass))
+        def push(
+            on_pass: Pass, entry_s: float, before: Pass | _Seed, via: Transition | None
+        ) -> None:
+            if on_pass in self._usable and entry_s < best_entry.get(on_pass, float("inf")):
+                best_entry[on_pass] = entry_s
+                previous[on_pass] = (before, via)
+                heapq.heappush(heap, (entry_s, next(order), on_pass))
 
-        for transition in self._outgoing[from_pass]:
-            push(transition, remaining + turn_seconds(transition), _START)
+        for seed in seeds:
+            if seed.from_place:
+                push(seed.on_pass, seed.cost_s, seed, None)
+                continue
+            arrive(seed.on_pass, seed.at_m, seed.cost_s, ((), None))
+            through = seed.cost_s + self.seconds(
+                seed.on_pass, self.length(seed.on_pass) - seed.at_m
+            )
+            for transition in self._outgoing[seed.on_pass]:
+                push(transition.to_pass, through + turn_seconds(transition), seed, transition)
 
         settled: set[Pass] = set()
         while heap:
@@ -152,11 +228,27 @@ class _Router:
                 break
             settled.add(on_pass)
             if on_pass in targets:
-                arrive_on(on_pass, entry_s, self._path_to(on_pass, previous))
+                arrive(on_pass, 0.0, entry_s, self._route_to(on_pass, previous))
             through = entry_s + self.seconds(on_pass, self.length(on_pass))
             for transition in self._outgoing[on_pass]:
-                push(transition, through + turn_seconds(transition), on_pass)
+                push(transition.to_pass, through + turn_seconds(transition), on_pass, transition)
         return best
+
+    @staticmethod
+    def _route_to(
+        on_pass: Pass, previous: dict[Pass, tuple[Pass | _Seed, Transition | None]]
+    ) -> tuple[tuple[Transition, ...], Pass | None]:
+        """The transitions driven to enter `on_pass`, and the pass left a place on, if any."""
+        path: list[Transition] = []
+        current: Pass | _Seed = on_pass
+        while isinstance(current, Pass):
+            before, transition = previous[current]
+            if transition is None:  # entered straight from a place
+                assert isinstance(before, _Seed)
+                return tuple(reversed(path)), before.on_pass
+            path.append(transition)
+            current = before
+        return tuple(reversed(path)), None
 
     def passed_recently(self, path: list[_Driven], stops: Sequence[SnappedStop]) -> _Leg | None:
         """The cheapest of `stops` to collect where the truck has just driven past it."""
@@ -185,18 +277,6 @@ class _Router:
                 break
         return best
 
-    @staticmethod
-    def _path_to(
-        on_pass: Pass, previous: dict[Pass, tuple[Pass | str, Transition]]
-    ) -> tuple[Transition, ...]:
-        path: list[Transition] = []
-        current: Pass | str = on_pass
-        while isinstance(current, Pass):
-            before, transition = previous[current]
-            path.append(transition)
-            current = before
-        return tuple(reversed(path))
-
 
 def street_key(graph: StateGraph, stop: SnappedStop) -> str:
     """The street a stop is listed on, normalised so spellings of one street match.
@@ -212,58 +292,140 @@ def street_runs(graph: StateGraph, stops: Sequence[SnappedStop]) -> list[list[Sn
     return [list(run) for _, run in itertools.groupby(stops, key=lambda s: street_key(graph, s))]
 
 
+class _Drive:
+    """The truck's path so far, and where it is: on a pass, or at a place node.
+
+    `pending` are the visits made since the last traversal; the next pass
+    driven joins on through the last of them, and any left at the end are the
+    route's closing visits.
+    """
+
+    def __init__(self, router: _Router) -> None:
+        self.router = router
+        self.path: list[_Driven] = []
+        self.joins: list[Join] = []
+        self.pickups: list[Pickup] = []
+        self.at_node: int | None = None
+        self.pending: list[PlaceVisit] = []
+        self.load = 0
+
+    def seeds(self) -> list[_Seed]:
+        if self.at_node is not None:
+            return self.router.seeds_at(self.at_node)
+        current = self.path[-1]
+        return [_Seed(current.on_pass, current.end_m, 0.0, False)]
+
+    def take(self, leg: _Leg) -> int:
+        """Drive `leg` and return the index of the traversal it ends on."""
+        router = self.router
+        if leg.path_index is not None:
+            return leg.path_index
+        if leg.origin is not None:
+            if self.path:
+                assert len(self.pending) == 1, "one visit joins two passes"
+                self.joins.append(self.pending.pop())
+            self.pending.clear()
+            self.path.append(_Driven(leg.origin, 0.0, router.length(leg.origin)))
+            self.at_node = None
+        elif leg.transitions:
+            self.path[-1].end_m = router.length(self.path[-1].on_pass)
+        for transition in leg.transitions:
+            self.joins.append(transition)
+            self.path.append(_Driven(transition.to_pass, 0.0, router.length(transition.to_pass)))
+        self.path[-1].end_m = leg.target_m
+        return len(self.path) - 1
+
+    def collect(self, stop: SnappedStop, leg: _Leg) -> None:
+        index = self.take(leg)
+        self.pickups.append(Pickup(stop.stop_id, index, leg.target_m, leg.wrong_side))
+        self.load += 1
+
+    def visit(self, place_visit: PlaceVisit) -> bool:
+        """Drive to the place and visit it; False if it cannot be reached."""
+        node = place_visit.place.node
+        if self.at_node != node:
+            leg = self.router.to_node(self.seeds(), node)
+            if leg is None:
+                return False
+            self.take(leg)
+            self.at_node = node
+        self.pending.append(place_visit)
+        return True
+
+
 def build_baseline(
-    graph: StateGraph, stops: Sequence[SnappedStop], rules: RoutingRules | None = None
+    graph: StateGraph,
+    stops: Sequence[SnappedStop],
+    rules: RoutingRules | None = None,
+    sites: RouteSites | None = None,
+    profile: TruckProfile | None = None,
 ) -> DrivenRoute:
     """Drive `stops` street by street and record every pass, turn and pickup side."""
     allowed_u_turns = u_turn_nodes(graph, stops, rules or RoutingRules())
     router = _Router(graph, allowed_u_turns)
-    path: list[_Driven] = []
-    joins: list[Join] = []
-    pickups: list[Pickup] = []
+    drive = _Drive(router)
+    capacity = (profile or TruckProfile()).capacity_carts
+    if sites is not None:
+        router.keep_within_reach_of(sites.disposal.node)
+        drive.at_node = sites.yard.node
     unreachable = [s.stop_id for s in stops if not router.passes_for(s)]
     reachable = [s for s in stops if router.passes_for(s)]
 
     for run in street_runs(graph, reachable):
-        if not path:
+        if not drive.path and drive.at_node is None:
             first = run.pop(0)
             legal = router.passes_for(first)
             first_pass = first.required_pass if first.required_pass in legal else legal[0]
             at_m = router.position(first_pass, first)
-            path.append(_Driven(first_pass, at_m, at_m))
-            pickups.append(Pickup(first.stop_id, 0, at_m, first_pass != first.required_pass))
+            drive.path.append(_Driven(first_pass, at_m, at_m))
+            drive.pickups.append(Pickup(first.stop_id, 0, at_m, first_pass != first.required_pass))
+            drive.load = 1
         while run:
-            current = path[-1]
-            passed = router.passed_recently(path, run)
-            leg = router.nearest(current.on_pass, current.end_m, run)
+            if sites is not None and capacity is not None and drive.load >= capacity:
+                if not drive.visit(PlaceVisit(sites.disposal, unload=True)):
+                    unreachable.extend(s.stop_id for s in run)
+                    break
+                drive.load = 0
+            passed = router.passed_recently(drive.path, run) if drive.at_node is None else None
+            leg = router.nearest(drive.seeds(), run)
             if passed is not None and (leg is None or not _better(leg, passed)):
                 leg = passed
             if leg is None:
                 unreachable.extend(s.stop_id for s in run)
                 break
-            stop = run.pop(leg.stop_index)
-            if leg.path_index is not None:
-                index = leg.path_index
-            elif not leg.transitions:
-                current.end_m = leg.target_m
-                index = len(path) - 1
-            else:
-                current.end_m = router.length(current.on_pass)
-                for transition in leg.transitions[:-1]:
-                    joins.append(transition)
-                    path.append(_Driven(transition.to_pass, 0.0, router.length(transition.to_pass)))
-                joins.append(leg.transitions[-1])
-                path.append(_Driven(leg.target_pass, 0.0, leg.target_m))
-                index = len(path) - 1
-            pickups.append(Pickup(stop.stop_id, index, leg.target_m, leg.wrong_side))
+            drive.collect(run.pop(leg.stop_index), leg)
+
+    closing: tuple[PlaceVisit, ...] = ()
+    if sites is not None and drive.pickups:
+        closing = _finish(drive, sites)
 
     serviced: dict[int, list[str]] = defaultdict(list)
-    for pickup in pickups:
+    for pickup in drive.pickups:
         serviced[pickup.traversal_index].append(pickup.stop_id)
     traversals = tuple(
         Traversal(d.on_pass, d.start_m, d.end_m, tuple(serviced.get(i, ())))
-        for i, d in enumerate(path)
+        for i, d in enumerate(drive.path)
     )
     return DrivenRoute(
-        traversals, tuple(joins), tuple(pickups), tuple(unreachable), allowed_u_turns
+        traversals,
+        tuple(drive.joins),
+        tuple(drive.pickups),
+        tuple(unreachable),
+        allowed_u_turns,
+        start=sites.yard if sites is not None else None,
+        closing_visits=closing,
+        end=sites.yard if sites is not None else None,
     )
+
+
+def _finish(drive: _Drive, sites: RouteSites) -> tuple[PlaceVisit, ...]:
+    """The final unload and the drive back to the yard; returns the visits after the last pass."""
+    reached = drive.visit(PlaceVisit(sites.disposal, unload=True))
+    assert reached, "the truck only drives passes that can reach the disposal site"
+    if sites.disposal.node != sites.yard.node:
+        if not drive.visit(PlaceVisit(sites.yard, unload=False)):
+            raise ValueError("the yard cannot be reached from the disposal site")
+        drive.pending.pop()  # arriving at the yard ends the route; it is not a visit
+    closing = tuple(drive.pending)
+    drive.pending.clear()
+    return closing

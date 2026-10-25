@@ -29,8 +29,8 @@ from starboard.solver.graph import (
     StateGraph,
     StreetSegment,
 )
-from starboard.solver.optimize import RouteSites, SolveSettings, TruckProfile, optimize
-from starboard.solver.route import DrivenRoute, PlaceVisit
+from starboard.solver.optimize import SolveSettings, optimize
+from starboard.solver.route import DrivenRoute, PlaceVisit, RouteSites, TruckProfile
 from starboard.solver.rules import RoutingRules, UTurnPolicy
 from starboard.solver.scorecard import score
 
@@ -299,6 +299,84 @@ def test_route_time_is_driving_plus_collection_plus_wrong_side_extra(scenario):
     assert card.route_time_s == pytest.approx(
         card.drive_time_s + card.service_time_s + card.wrong_side_time_s
     )
+
+
+def _check_joins(scenario: Scenario, route: DrivenRoute) -> None:
+    """Each join is a legal turn, or a visit to the node one pass ends and the next starts at."""
+    graph = scenario.graph
+    transitions = set(graph.transitions)
+    assert len(route.joins) == max(len(route.traversals) - 1, 0)
+    for index, join in enumerate(route.joins):
+        before, after = route.traversals[index], route.traversals[index + 1]
+        if isinstance(join, PlaceVisit):
+            assert _pass_ends(graph, before.on_pass)[1] == join.place.node
+            assert before.end_m == pytest.approx(graph.segments[before.on_pass.segment_id].length_m)
+            assert _pass_ends(graph, after.on_pass)[0] == join.place.node
+            assert after.start_m == 0.0
+            continue
+        assert join in transitions
+        assert not join.forbidden_by_restriction
+        if join.is_u_turn:
+            assert allowed_u_turn(scenario, join.via_node)
+        assert (join.from_pass, join.to_pass) == (before.on_pass, after.on_pass)
+
+
+def _check_yard_to_yard(
+    scenario: Scenario, route: DrivenRoute, sites: RouteSites, capacity: int | None
+) -> None:
+    """Starts at the yard, unloads before the end and whenever full, ends at the yard."""
+    graph = scenario.graph
+    if not route.pickups:
+        return
+    assert route.start == sites.yard and route.end == sites.yard
+    first, last = route.traversals[0], route.traversals[-1]
+    assert _pass_ends(graph, first.on_pass)[0] == sites.yard.node and first.start_m == 0.0
+    end_node = sites.disposal.node if route.closing_visits else sites.yard.node
+    assert _pass_ends(graph, last.on_pass)[1] == end_node
+    if route.closing_visits:
+        assert sites.disposal.node == sites.yard.node
+    unload_points = [i for i, j in enumerate(route.joins) if isinstance(j, PlaceVisit) and j.unload]
+    unload_points += [len(route.traversals) - 1] * sum(v.unload for v in route.closing_visits)
+    assert unload_points, "the route never visits the disposal site"
+    assert max(p.traversal_index for p in route.pickups) <= max(unload_points)
+    collected_by = defaultdict(int)
+    for pickup in route.pickups:
+        collected_by[pickup.traversal_index] += 1
+    load, unloads_after = 0, sorted(unload_points)
+    for index in range(len(route.traversals)):
+        load += collected_by[index]
+        if capacity is not None:
+            assert load <= capacity
+        while unloads_after and unloads_after[0] == index:
+            load = 0
+            unloads_after.pop(0)
+
+
+@st.composite
+def current_routes_with_sites(draw: st.DrawFn) -> tuple[Scenario, RouteSites, TruckProfile]:
+    scenario = draw(scenarios())
+    nodes = sorted({n for s in scenario.graph.segments.values() for n in (s.from_node, s.to_node)})
+    sites = RouteSites(
+        Place("yard", draw(st.sampled_from(nodes))),
+        Place("disposal", draw(st.sampled_from(nodes))),
+    )
+    return scenario, sites, TruckProfile(capacity_carts=draw(st.none() | st.integers(1, 8)))
+
+
+@given(current_routes_with_sites())
+def test_the_current_route_with_sites_drives_yard_to_yard_legally(problem):
+    scenario, sites, profile = problem
+    try:
+        route = build_baseline(
+            scenario.graph, scenario.stops, scenario.rules, sites=sites, profile=profile
+        )
+    except ValueError:
+        assert not _yard_reachable_from_disposal(scenario, sites)
+        return
+    _check_joins(scenario, route)
+    unreachable = set(route.unreachable_stop_ids)
+    assert {p.stop_id for p in route.pickups} | unreachable == {s.stop_id for s in scenario.stops}
+    _check_yard_to_yard(scenario, route, sites, profile.capacity_carts)
 
 
 # The optimized route: invariants 1 to 4 (CLAUDE.md) on every route the solver returns.

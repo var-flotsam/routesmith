@@ -10,6 +10,22 @@ from starboard.solver.graph import Pass, Place, Transition
 
 
 @dataclass(frozen=True, slots=True)
+class TruckProfile:
+    """`capacity_carts` is how many carts fill the truck; `None` means one load suffices."""
+
+    capacity_carts: int | None = None
+    max_route_duration_s: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RouteSites:
+    """Where a route starts and ends (the yard) and where the truck unloads."""
+
+    yard: Place
+    disposal: Place
+
+
+@dataclass(frozen=True, slots=True)
 class Traversal:
     """Driving along one pass from `start_m` to `end_m`, measured in the pass's direction."""
 
@@ -47,8 +63,8 @@ class DrivenRoute:
     A join is a turn from one pass onto the next, or a visit to a place the
     previous pass ends at and the next one starts from. `start` is where the
     route begins, before the first traversal; `closing_visits` happen after
-    the last traversal, and `end` is where the route finishes. The current
-    route has no start or end place until routes carry a yard.
+    the last traversal, and `end` is where the route finishes. A route built
+    without route sites has no start or end place.
 
     `pickups` are in the order the stops were collected. A traversal's
     `serviced_stop_ids` are the stops collected along it. `u_turn_nodes` are
