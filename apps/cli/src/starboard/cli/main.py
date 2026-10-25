@@ -1,9 +1,11 @@
 """The starboard command line.
 
 `starboard score <stops.csv>` prints the current route's scorecard, no solve.
-`starboard optimize <stops.csv> --yard=LON,LAT --disposal=LON,LAT` also solves
-the optimized route and prints both scorecards side by side. Write the sites
-with "=", since a negative longitude would otherwise read as a flag.
+`starboard optimize <stops.csv> --route route.json` also solves the optimized
+route and prints both scorecards side by side. The route file gives the yard,
+the disposal site and the truck (see data/demo/route.json); `--yard`,
+`--disposal`, `--capacity` and `--max-hours` override it. Write sites with
+"=" (`--yard=-73.65,41.02`), since a negative longitude reads as a flag.
 """
 
 import argparse
@@ -80,6 +82,20 @@ def _extract_path(value: str | None, cache_dir: Path) -> Path | None:
     return Path(value)
 
 
+def _apply_route_file(args: argparse.Namespace) -> None:
+    """Fill sites and truck from `--route`, leaving any value given on the command line."""
+    if args.route is None:
+        return
+    config = json.loads(args.route.read_text(encoding="utf-8"))
+    for key in ("yard", "disposal"):
+        if getattr(args, key) is None and key in config:
+            setattr(args, key, LonLat(lon=float(config[key]["lon"]), lat=float(config[key]["lat"])))
+    if args.capacity is None and config.get("capacity_carts") is not None:
+        args.capacity = int(config["capacity_carts"])
+    if args.max_hours is None and config.get("max_route_hours") is not None:
+        args.max_hours = float(config["max_route_hours"])
+
+
 def _lon_lat(text: str) -> LonLat:
     try:
         lon, lat = (float(part) for part in text.split(","))
@@ -98,6 +114,7 @@ class _Loaded:
 
 def _load(args: argparse.Namespace) -> _Loaded | int:
     """Read the stops, fetch the network and snap; an exit code on failure."""
+    _apply_route_file(args)
     stop_file = read_stop_file(args.stops)
     if not stop_file.stops:
         print(f"no readable stops in {args.stops}", file=sys.stderr)
@@ -173,8 +190,12 @@ def score_command(args: argparse.Namespace) -> int:
 
 
 def optimize_command(args: argparse.Namespace) -> int:
+    _apply_route_file(args)
     if args.yard is None or args.disposal is None:
-        print("optimize needs --yard and --disposal", file=sys.stderr)
+        print(
+            "optimize needs a yard and a disposal site: --route, or --yard and --disposal",
+            file=sys.stderr,
+        )
         return 1
     loaded = _load(args)
     if isinstance(loaded, int):
@@ -201,6 +222,7 @@ def optimize_command(args: argparse.Namespace) -> int:
             "optimized_order": [p.stop_id for p in result.route.pickups],
             "unserved": dict(sorted(unserved.items())),
             "over_duration_s": result.over_duration_s,
+            "time_limited": result.time_limited,
         }
         print(json.dumps(report, indent=2))
         return 0
@@ -208,6 +230,8 @@ def optimize_command(args: argparse.Namespace) -> int:
     print(f"OSM snapshot: {loaded.graph.osm_snapshot}")
     print()
     print(_comparison(now, new))
+    if result.time_limited:
+        print("\nThe search hit its time ceiling; this route may differ on another machine")
     if result.over_duration_s > 0:
         print(f"\nOptimized route is {result.over_duration_s:,.0f} s over the maximum duration")
     if unserved:
@@ -231,6 +255,9 @@ def _common(parser: argparse.ArgumentParser) -> None:
         "--yard", type=_lon_lat, metavar="LON,LAT", help="where routes start and end"
     )
     parser.add_argument("--disposal", type=_lon_lat, metavar="LON,LAT", help="where trucks unload")
+    parser.add_argument(
+        "--route", type=Path, metavar="FILE", help="route file: yard, disposal site, truck"
+    )
     parser.add_argument("--capacity", type=int, metavar="CARTS", help="carts per load")
     parser.add_argument("--max-hours", type=float, metavar="HOURS", help="maximum route duration")
     parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE_DIR)

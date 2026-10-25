@@ -67,4 +67,25 @@ def test_optimize_compares_current_and_optimized(tmp_path, monkeypatch, capsys):
 
 def test_optimize_needs_both_sites(tmp_path, capsys):
     assert cli.main(["optimize", str(stops_csv(tmp_path))]) == 1
-    assert "needs --yard and --disposal" in capsys.readouterr().err
+    assert "needs a yard and a disposal site" in capsys.readouterr().err
+
+
+def test_a_route_file_supplies_the_sites_and_truck(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(
+        cli, "fetch_network", lambda bbox, cache_dir, extract: build_state_graph(GRID.segments())
+    )
+    yard = GRID.at(0, 0)
+    route = tmp_path / "route.json"
+    route.write_text(
+        json.dumps(
+            {
+                "yard": {"lon": yard.lon, "lat": yard.lat},
+                "disposal": {"lon": yard.lon, "lat": yard.lat},
+                "capacity_carts": 2,
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert cli.main(["optimize", str(stops_csv(tmp_path)), "--route", str(route), "--json"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["optimized"]["disposal_visits"] >= 2

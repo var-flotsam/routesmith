@@ -94,11 +94,18 @@ class Plan:
 
 @dataclass(frozen=True, slots=True)
 class OptimizedRoute:
+    """The route, its plan, the stops it cannot serve, and how the search ended.
+
+    `time_limited` is true when the wall-clock ceiling, not the solution limit,
+    stopped the search; such a route may differ on a faster or slower machine.
+    """
+
     route: DrivenRoute
     plan: Plan
     unserved: tuple[UnservedStop, ...]
     over_duration_s: float = 0.0
     solutions_searched: int = 0
+    time_limited: bool = False
 
 
 def _position(graph: StateGraph, on_pass: Pass, stop: SnappedStop) -> float:
@@ -263,7 +270,7 @@ class _LineGraphModel:
         if j == self.end:
             return costs.return_ms if self.is_visit(i) else costs.close(self.pass_at(i))
         if self.is_visit(j):
-            return costs.unload_ms if self.is_visit(i) else self._to_visit(i)
+            return _NO_ARC_MS if self.is_visit(i) else self._to_visit(i)
         b = self.pass_at(j)
         if i == 0:
             return costs.open_ms[b] + costs.service_ms[b]
@@ -286,6 +293,9 @@ def _search_parameters(solution_limit: int) -> routing_parameters_pb2.RoutingSea
     )
     params.solution_limit = solution_limit
     params.time_limit.FromSeconds(round(defaults.SOLVER_TIME_LIMIT.value))
+    # The completion search inside insertion moves is bounded by wall time unless this
+    # is raised; at its 0.1 s default a slower machine could give a different route.
+    params.lns_time_limit.FromSeconds(round(defaults.SOLVER_TIME_LIMIT.value))
     params.log_search = False
     return params
 
@@ -332,8 +342,9 @@ def _solve_order(
     warm_order: list[Pass],
     profile: TruckProfile,
     solution_limit: int,
-) -> tuple[list[Pass], int]:
-    """An order of `passes` from OR-Tools routing, and how many solutions it searched."""
+) -> tuple[list[Pass], int, bool]:
+    """An order of `passes` from OR-Tools routing, how many solutions it searched, and
+    whether the wall-clock ceiling stopped it (then the route can vary by machine)."""
     capacity = profile.capacity_carts
     warm_plan = costs.best_unloads(warm_order, capacity) if warm_order else None
     needed = 0 if capacity is None else max(0, -(-sum(costs.carts.values()) // capacity) - 1)
@@ -368,7 +379,7 @@ def _solve_order(
     if solution is None:
         solution = routing.SolveWithParameters(params)
     if solution is None:
-        return list(warm_order or passes), 0
+        return list(warm_order or passes), 0, False
 
     order: list[Pass] = []
     index = routing.Start(0)
@@ -377,7 +388,8 @@ def _solve_order(
         if model.first_pass <= node < model.first_visit:
             order.append(model.pass_at(node))
         index = solution.Value(routing.NextVar(index))
-    return order, routing.solver().Solutions()
+    timed_out = routing.solver().WallTime() / _MS_PER_S >= defaults.SOLVER_TIME_LIMIT.value
+    return order, routing.solver().Solutions(), timed_out
 
 
 class _Sequence:
@@ -593,7 +605,9 @@ def optimize(
         )
     )
     limit = settings.solution_limit or round(defaults.SOLVER_SOLUTION_LIMIT.value)
-    order, searched = _solve_order(costs, passes, warm_order, profile, limit) if passes else ([], 0)
+    order, searched, timed_out = (
+        _solve_order(costs, passes, warm_order, profile, limit) if passes else ([], 0, False)
+    )
     plan = _improve(
         costs, costs.best_unloads(order, profile.capacity_carts), profile.capacity_carts
     )
@@ -602,4 +616,4 @@ def optimize(
     over = 0.0
     if profile.max_route_duration_s is not None:
         over = max(0.0, plan.cost_ms / _MS_PER_S - profile.max_route_duration_s)
-    return OptimizedRoute(route, plan, tuple(unserved), over, searched)
+    return OptimizedRoute(route, plan, tuple(unserved), over, searched, timed_out)

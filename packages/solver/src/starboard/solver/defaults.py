@@ -211,14 +211,16 @@ SITE_MAX_DISTANCE = Tunable(
 # The optimizer (packages/solver)
 
 DISPOSAL_UNLOAD_TIME = Tunable(
-    value=660.0,
+    value=960.0,
     unit="s",
     reason=(
-        "Time at the disposal site per visit: measured at 11 minutes on average to unload at a "
-        "transfer station (Jaunich et al. 2016, Resources, Conservation & Recycling 114:92-102, "
-        "abstract; landfills took 14-22 minutes)."
+        "Time on site per disposal visit, queue, weighing and tipping included: a GPS study of "
+        "3,053 transfer-station visits measured a mean of 16 minutes (Steyn 2021, University of "
+        "Pretoria, section 3.3.1), matching 16.4 minutes over a year at four stations (Wilson & "
+        "Vincent 2008, Waste Management 28(10):1742-1750). The mean, not the median, because "
+        "route totals add means."
     ),
-    source="https://doi.org/10.1016/j.resconrec.2016.07.012",
+    source="https://repository.up.ac.za/handle/2263/81173",
 )
 
 SOLVER_SOLUTION_LIMIT = Tunable(
