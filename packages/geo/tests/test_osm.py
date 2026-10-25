@@ -97,7 +97,7 @@ def test_network_is_fetched_once_then_read_from_cache(tmp_path, monkeypatch):
     ]
     assert first.osm_snapshot == second.osm_snapshot == "2026-10-24T09:00:00Z"
     assert sorted(first.segments) == sorted(second.segments)
-    sidecar = json.loads(next(tmp_path.glob("*.json")).read_text(encoding="utf-8"))
+    sidecar = json.loads((tmp_path / f"{bbox.cache_key()}.json").read_text(encoding="utf-8"))
     assert sidecar["osm_timestamp"] == "2026-10-24T09:00:00Z"
     assert sidecar["bbox"]["west"] == -73.001
 
