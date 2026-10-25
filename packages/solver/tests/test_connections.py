@@ -15,8 +15,12 @@ from starboard.solver.connections import (
     traversal_ms,
     turn_ms,
 )
-from starboard.solver.graph import Direction, Pass, Place, StateGraph
+from starboard.solver.graph import Direction, Pass, Place, StateGraph, Transition
+from starboard.solver.route import PlaceVisit
 from starboard.solver.rules import RoutingRules, UTurnPolicy, u_turn_nodes
+
+# Going in and out of a place costs 2 ms in the search graph (one ms in, one out).
+PASS_THROUGH_MS = 2
 
 
 def ends(graph: StateGraph, p: Pass) -> tuple[int, int]:
@@ -26,30 +30,37 @@ def ends(graph: StateGraph, p: Pass) -> tuple[int, int]:
     )
 
 
-def oracle(graph: StateGraph, allowed_u: frozenset[int], source: Pass) -> dict[Pass, int]:
-    """Cost from the end of `source` to the start of every pass, by plain Dijkstra."""
-    out = defaultdict(list)
+def oracle(
+    graph: StateGraph, allowed_u: frozenset[int], source: Pass, places: list[Place]
+) -> dict[Pass, int]:
+    """Cost from the end of `source` to the start of every pass, by plain Dijkstra.
+
+    At a place node the truck may also turn onto any pass starting there, at no turn cost:
+    the free turnaround inside the yard or disposal site.
+    """
+    out: dict[Pass, list[tuple[Pass, int]]] = defaultdict(list)
     for t in graph.transitions:
         if t.forbidden_by_restriction or (t.is_u_turn and t.via_node not in allowed_u):
             continue
-        out[t.from_pass].append(t)
+        out[t.from_pass].append((t.to_pass, turn_ms(t)))
+    place_nodes = {p.node for p in places}
+    for a in graph.passes:
+        if ends(graph, a)[1] in place_nodes:
+            for b in graph.passes:
+                if ends(graph, b)[0] == ends(graph, a)[1]:
+                    out[a].append((b, PASS_THROUGH_MS))
     best: dict[Pass, int] = {}
-    heap = [
-        (turn_ms(t), t.to_pass.segment_id, t.to_pass.direction.value, t.to_pass)
-        for t in out[source]
-    ]
+    heap = [(cost, b.segment_id, b.direction.value, b) for b, cost in out[source]]
     heapq.heapify(heap)
     while heap:
         cost, _, _, p = heapq.heappop(heap)
         if p in best:
             continue
         best[p] = cost
-        for t in out[p]:
-            if t.to_pass not in best:
-                nxt = cost + traversal_ms(graph, p) + turn_ms(t)
-                heapq.heappush(
-                    heap, (nxt, t.to_pass.segment_id, t.to_pass.direction.value, t.to_pass)
-                )
+        for b, step in out[p]:
+            if b not in best:
+                nxt = cost + traversal_ms(graph, p) + step
+                heapq.heappush(heap, (nxt, b.segment_id, b.direction.value, b))
     return best
 
 
@@ -85,14 +96,33 @@ def networks(draw):
 
 @given(networks())
 def test_costs_between_passes_match_an_independent_dijkstra(network):
-    graph, allowed_u, anchors, _, _ = network
-    costs = ConnectionCosts(graph, allowed_u, anchors)
-    for a in anchors:
-        expected = oracle(graph, allowed_u, a)
-        for b in graph.passes:
-            if b == a:
-                continue
-            assert costs.between(a, b) == expected.get(b, UNREACHABLE), (a, b)
+    graph, allowed_u, anchors, yard, disposal = network
+    for places in ([], [yard, disposal]):
+        costs = ConnectionCosts(graph, allowed_u, anchors, places)
+        for a in anchors:
+            expected = oracle(graph, allowed_u, a, places)
+            for b in graph.passes:
+                if b != a:
+                    assert costs.between(a, b) == expected.get(b, UNREACHABLE), (a, b, places)
+
+
+def _walk_cost(graph, allowed_u, start: Pass, steps, transitions) -> tuple[int, Pass]:
+    """Check each step is legal; return the cost from the end of `start` and the last pass."""
+    cost, current = 0, start
+    for join, next_pass in steps:
+        if isinstance(join, Transition):
+            assert join in transitions
+            assert join.from_pass == current and join.to_pass == next_pass
+            assert not join.forbidden_by_restriction
+            assert not join.is_u_turn or join.via_node in allowed_u
+            step = turn_ms(join)
+        else:
+            assert isinstance(join, PlaceVisit) and not join.unload
+            assert ends(graph, current)[1] == join.place.node == ends(graph, next_pass)[0]
+            step = PASS_THROUGH_MS
+        cost += (traversal_ms(graph, current) if current != start else 0) + step
+        current = next_pass
+    return cost, current
 
 
 @given(networks())
@@ -101,35 +131,41 @@ def test_paths_are_legal_and_add_up_to_their_cost(network):
     costs = ConnectionCosts(graph, allowed_u, anchors, [yard, disposal])
     transitions = set(graph.transitions)
 
-    def check_chain(start: Pass, path, end: Pass) -> int:
-        cost, current = 0, start
-        for t in path:
-            assert t in transitions
-            assert t.from_pass == current
-            assert not t.forbidden_by_restriction
-            assert not t.is_u_turn or t.via_node in allowed_u
-            cost += (traversal_ms(graph, current) if current != start else 0) + turn_ms(t)
-            current = t.to_pass
-        assert current == end
-        return cost
-
     for a in anchors:
         for b in anchors:
             if a != b and costs.between(a, b) != UNREACHABLE:
-                assert check_chain(a, costs.path_between(a, b), b) == costs.between(a, b)
+                cost, last = _walk_cost(graph, allowed_u, a, costs.path_between(a, b), transitions)
+                assert last == b
+                assert cost == costs.between(a, b)
         if costs.to_place(a, disposal) != UNREACHABLE:
-            path = costs.path_to_place(a, disposal)
-            last = path[-1].to_pass if path else a
+            steps = costs.path_to_place(a, disposal)
+            cost, last = _walk_cost(graph, allowed_u, a, steps, transitions)
             assert ends(graph, last)[1] == disposal.node
-            total = check_chain(a, path, last) + (traversal_ms(graph, last) if path else 0)
+            total = cost + (traversal_ms(graph, last) if steps else 0)
             assert total == costs.to_place(a, disposal)
         if costs.from_place(yard, a) != UNREACHABLE:
-            first, path = costs.path_from_place(yard, a)
+            first, steps = costs.path_from_place(yard, a)
             assert ends(graph, first)[0] == yard.node
-            # check_chain leaves out the first pass's own traversal; add it back.
-            chain = check_chain(first, path, a)
-            expected = chain + (traversal_ms(graph, first) if first != a else 0)
-            assert expected == costs.from_place(yard, a)
+            cost, last = _walk_cost(graph, allowed_u, first, steps, transitions)
+            assert last == a
+            # The cost counts driving the first pass, which the walk leaves out.
+            total = cost + (traversal_ms(graph, first) if steps else 0)
+            assert total == costs.from_place(yard, a)
+
+
+def test_a_turnaround_inside_a_place_is_used_when_the_street_forbids_it():
+    # With no U-turns allowed on the street, turning round inside the disposal site at
+    # the far end of a block is quicker than driving round the block.
+    grid = Grid()
+    graph = build_state_graph(grid.segments())
+    there = Pass("h-0-0", Direction.FORWARD)
+    back = Pass("h-0-0", Direction.REVERSE)
+    place = Place("disposal", grid.node(0, 1))
+    without = ConnectionCosts(graph, frozenset(), [there], [])
+    with_place = ConnectionCosts(graph, frozenset(), [there], [place])
+    assert with_place.between(there, back) < without.between(there, back)
+    steps = with_place.path_between(there, back)
+    assert [type(join) for join, _ in steps] == [PlaceVisit]
 
 
 def test_leaving_and_reaching_the_same_place_costs_nothing():

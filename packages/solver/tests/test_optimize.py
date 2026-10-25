@@ -1,17 +1,29 @@
+import itertools
+
 import pytest
+from hypothesis import assume, given
+from hypothesis import settings as settings_
+from hypothesis import strategies as st
 
 from starboard.geo.snapping import Snapper, StopPoint
 from starboard.geo.state_graph import build_state_graph
 from starboard.geo.synthetic import Grid
+from starboard.solver.connections import ConnectionCosts
 from starboard.solver.graph import Place, SnappedStop, StreetSegment
-from starboard.solver.optimize import (
+from starboard.solver.optimize import (  # the private names are tested against brute force
+    _INFEASIBLE_MS,
     RouteSites,
     SolveSettings,
     TruckProfile,
     UnservedReason,
+    _Costs,
+    _improve,
+    _required_passes,
+    _Sequence,
     optimize,
 )
 from starboard.solver.route import PlaceVisit
+from starboard.solver.rules import RoutingRules, u_turn_nodes
 from starboard.solver.scorecard import score
 
 GRID = Grid()
@@ -47,11 +59,20 @@ def test_a_full_truck_unloads_before_collecting_more():
     stops = [stop(f"s{k}", x, -10) for k, x in enumerate(xs)]  # row 0, south curb
     stops += [stop(f"t{k}", x, 290) for k, x in enumerate(xs)]  # row 3, south curb
     result = optimize(GRAPH, stops, SITES, settings(capacity_carts=4))
-    assert len(result.route.pickups) == 8
-    unloads = [v for v in result.route.place_visits if v.unload]
-    assert len(unloads) >= 2
-    card = score(GRAPH, result.route)
-    assert card.disposal_visits == len(unloads)
+    route = result.route
+    assert len(route.pickups) == 8
+    # Replay the load: it never passes 4, and the truck unloads as soon as it is full.
+    collected = [0] * len(route.traversals)
+    for pickup in route.pickups:
+        collected[pickup.traversal_index] += 1
+    load = 0
+    for index, carts in enumerate(collected):
+        load += carts
+        assert load <= 4
+        join = route.joins[index] if index < len(route.joins) else None
+        if isinstance(join, PlaceVisit) and join.unload:
+            load = 0
+    assert score(GRAPH, route).disposal_visits == len(result.plan.unload_after) + 1 == 2
 
 
 def test_a_pass_holding_more_carts_than_the_truck_goes_to_review():
@@ -91,4 +112,134 @@ def test_the_warm_start_does_not_change_which_stops_are_served():
     cold = optimize(GRAPH, stops, SITES, settings())
     warm = optimize(GRAPH, stops, SITES, settings(), warm_start=list(reversed(stops)))
     assert {p.stop_id for p in cold.route.pickups} == {p.stop_id for p in warm.route.pickups}
-    assert all(isinstance(v, PlaceVisit) for v in warm.route.place_visits)
+    assert warm.plan.cost_ms <= warm.start_cost_ms
+
+
+# The unload placement and the move prices, against brute force on small orders.
+
+
+def _costs_for(stops, capacity):
+    """The optimizer's own cost tables for these stops' required passes."""
+    stops_on, _ = _required_passes(GRAPH, stops)
+    allowed = u_turn_nodes(GRAPH, stops, RoutingRules())  # the rules optimize() uses
+    connections = ConnectionCosts(GRAPH, allowed, stops_on, [SITES.yard, SITES.disposal])
+    return _Costs(GRAPH, connections, SITES, {p: len(v) for p, v in stops_on.items()})
+
+
+PLACES = [(x, y) for x in (30, 70, 130, 170, 230, 270) for y in (-10, 90, 290)]
+
+
+@given(
+    st.lists(st.sampled_from(PLACES), min_size=1, max_size=7, unique=True),
+    st.none() | st.integers(1, 4),
+    st.randoms(use_true_random=False),
+)
+@settings_(deadline=None)
+def test_unloads_are_placed_optimally_for_an_order(places, capacity, rnd):
+    stops = [stop(f"s{k}", x, y) for k, (x, y) in enumerate(places)]
+    costs = _costs_for(stops, capacity)
+    assume(capacity is None or max(costs.carts.values()) <= capacity)  # else it goes to review
+    order = sorted(costs.carts, key=lambda p: (p.segment_id, p.direction.value))
+    rnd.shuffle(order)
+    plan = costs.best_unloads(order, capacity)
+    best = None
+    for mask in range(1 << max(len(order) - 1, 0)):
+        unloads = [k for k in range(len(order) - 1) if mask >> k & 1]
+        bounds = [-1, *unloads, len(order) - 1]
+        loads = [
+            sum(costs.carts[p] for p in order[a + 1 : b + 1]) for a, b in itertools.pairwise(bounds)
+        ]
+        if capacity is not None and max(loads) > capacity:
+            continue
+        cost = costs.plan_cost(order, unloads)
+        best = cost if best is None else min(best, cost)
+    assert best is not None
+    assert plan.cost_ms == best
+
+
+@given(
+    st.lists(st.sampled_from(PLACES), min_size=3, max_size=8, unique=True),
+    st.data(),
+)
+@settings_(deadline=None)
+def test_move_prices_match_the_recomputed_cost(places, data):
+    stops = [stop(f"s{k}", x, y) for k, (x, y) in enumerate(places)]
+    costs = _costs_for(stops, None)
+    order = sorted(costs.carts, key=lambda p: (p.segment_id, p.direction.value))
+    n = len(order)
+    if n < 3:
+        return
+    seq = _Sequence(costs, order)
+
+    def total(sequence):
+        return sum(seq.edge(a, b) for a, b in itertools.pairwise([None, *sequence, None]))
+
+    i = data.draw(st.integers(0, n - 2))
+    j = data.draw(st.integers(i + 1, n - 1))
+    reversed_order = order[:i] + order[i : j + 1][::-1] + order[j + 1 :]
+    assert seq.two_opt_gain(i, j) == total(order) - total(reversed_order)
+
+    length = data.draw(st.integers(1, min(3, n - 1)))
+    i = data.draw(st.integers(0, n - length))
+    gap = data.draw(st.sampled_from([g for g in range(n + 1) if not i <= g <= i + length]))
+    block, rest = order[i : i + length], order[:i] + order[i + length :]
+    at = gap if gap < i else gap - length
+    moved = rest[:at] + block + rest[at:]
+    assert seq.or_opt_gain(i, length, gap) == total(order) - total(moved)
+
+
+@given(
+    st.lists(st.sampled_from(PLACES), min_size=1, max_size=6, unique=True),
+    st.none() | st.integers(2, 4),
+)
+@settings_(deadline=None)
+def test_small_routes_are_solved_to_the_brute_force_optimum(places, capacity):
+    stops = [stop(f"s{k}", x, y) for k, (x, y) in enumerate(places)]
+    costs = _costs_for(stops, capacity)
+    assume(capacity is None or max(costs.carts.values()) <= capacity)
+    assume(len(costs.carts) <= 5)  # 120 orders at most
+    best = min(
+        costs.best_unloads(list(order), capacity).cost_ms
+        for order in itertools.permutations(costs.carts)
+    )
+    result = optimize(GRAPH, stops, SITES, settings(capacity_carts=capacity))
+    assert result.plan.cost_ms == best
+
+
+@given(
+    st.lists(st.sampled_from(PLACES), min_size=3, max_size=8, unique=True),
+    st.none() | st.integers(2, 4),
+    st.randoms(use_true_random=False),
+)
+@settings_(deadline=None)
+def test_local_search_ends_where_no_2_opt_or_or_opt_move_helps(places, capacity, rnd):
+    """With no capacity limit, moves are priced exactly, so the search ends at a local optimum.
+
+    With a capacity, moves are found on the cost without forced unloads and only then
+    priced with them, so the end is no worse than the start but need not be a local optimum.
+    """
+    stops = [stop(f"s{k}", x, y) for k, (x, y) in enumerate(places)]
+    costs = _costs_for(stops, capacity)
+    assume(capacity is None or max(costs.carts.values()) <= capacity)
+    order = sorted(costs.carts, key=lambda p: (p.segment_id, p.direction.value))
+    rnd.shuffle(order)
+    start = costs.best_unloads(order, capacity)
+    assume(start.cost_ms < _INFEASIBLE_MS)
+    improved = _improve(costs, start, capacity)
+    assert improved.cost_ms <= start.cost_ms
+    if capacity is not None:
+        return
+    sequence = list(improved.sequence)
+    n = len(sequence)
+    neighbours = [
+        sequence[:i] + sequence[i : j + 1][::-1] + sequence[j + 1 :]
+        for i in range(n)
+        for j in range(i + 1, n)
+    ]
+    for i in range(n):
+        for length in (1, 2, 3):
+            block, rest = sequence[i : i + length], sequence[:i] + sequence[i + length :]
+            neighbours += [rest[:at] + block + rest[at:] for at in range(len(rest) + 1)]
+    assert all(
+        costs.best_unloads(other, capacity).cost_ms >= improved.cost_ms for other in neighbours
+    )

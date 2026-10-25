@@ -258,17 +258,6 @@ SPARE_DISPOSAL_VISITS = Tunable(
     ),
 )
 
-DURATION_EXCESS_COST = Tunable(
-    value=100.0,
-    unit="ms of cost per ms over",
-    reason=(
-        "Weight on time beyond the truck's maximum route duration, large enough to dominate "
-        "drive time so the search keeps routes within the limit when it can; the OR-Tools VRP "
-        "guide uses 100 for its span weight."
-    ),
-    source="https://developers.google.com/optimization/routing/vrp",
-)
-
 
 def all_tunables() -> dict[str, Tunable]:
     """Every module-level `Tunable` in this file, keyed by name."""
