@@ -121,3 +121,11 @@ class SnappedStop:
     side_of_forward: CurbSide
     required_pass: Pass
     street: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Place:
+    """A network node a route starts, ends or unloads at, such as the yard or a disposal site."""
+
+    name: str
+    node: int

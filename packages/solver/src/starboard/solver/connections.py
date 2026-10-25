@@ -15,14 +15,13 @@ Shortest paths come from SciPy's Dijkstra over the pass graph
 
 import itertools
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
 
 import numpy as np
 from scipy.sparse import csr_array
 from scipy.sparse.csgraph import dijkstra
 
 from starboard.solver.costs import drive_seconds, turn_seconds
-from starboard.solver.graph import Direction, Pass, StateGraph, Transition
+from starboard.solver.graph import Direction, Pass, Place, StateGraph, Transition
 
 _MS_PER_S = 1000
 # Every edge weighs at least this, because the shortest-path routine does not
@@ -47,14 +46,6 @@ def traversal_ms(graph: StateGraph, on_pass: Pass) -> int:
 
 def turn_ms(transition: Transition) -> int:
     return round(turn_seconds(transition) * _MS_PER_S)
-
-
-@dataclass(frozen=True, slots=True)
-class Place:
-    """A network node the route starts, ends or unloads at."""
-
-    name: str
-    node: int
 
 
 class ConnectionCosts:
