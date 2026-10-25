@@ -24,7 +24,9 @@ from starboard.geo.osm import DEFAULT_CACHE_DIR, bbox_around, fetch_network
 from starboard.geo.places import place_at
 from starboard.geo.snapping import SnapOutcome, snap_stops
 from starboard.solver.baseline import build_baseline
+from starboard.solver.fleet import Area, FleetSettings, solve_routes
 from starboard.solver.graph import LonLat, StateGraph
+from starboard.solver.objectives import RouteObjective
 from starboard.solver.optimize import SolveSettings, optimize
 from starboard.solver.route import RouteSites, TruckProfile
 from starboard.solver.rules import RoutingRules, UTurnPolicy
@@ -33,6 +35,7 @@ from starboard.solver.scorecard import Scorecard, score
 # Room around the outermost stops and sites for the streets that bound them.
 NETWORK_MARGIN_M = 300.0
 _SECONDS_PER_HOUR = 3600.0
+_MS_PER_S = 1000
 
 _ROWS = (
     ("Distance", "distance_m", "{:,.0f} m"),
@@ -204,6 +207,8 @@ def optimize_command(args: argparse.Namespace) -> int:
     rules = RoutingRules(u_turns=UTurnPolicy(args.u_turns))
     profile = _profile(args)
     stops = loaded.outcome.snapped
+    if args.trucks > 1:
+        return _optimize_fleet(args, loaded, SolveSettings(profile, rules))
     try:
         current = build_baseline(loaded.graph, stops, rules, sites=loaded.sites, profile=profile)
         result = optimize(
@@ -238,6 +243,52 @@ def optimize_command(args: argparse.Namespace) -> int:
         print("\nStops the optimized route cannot serve:")
         for reason, count in sorted(unserved.items()):
             print(f"  {reason}: {count}")
+    _print_footer(loaded)
+    return 0
+
+
+def _optimize_fleet(args: argparse.Namespace, loaded: _Loaded, settings: SolveSettings) -> int:
+    """Several routes: one district per truck, each with its own scorecard."""
+    assert loaded.sites is not None
+    area = Area(loaded.graph, tuple(loaded.outcome.snapped), loaded.sites)
+    fleet = FleetSettings(args.trucks, RouteObjective(args.objective), settings)
+    try:
+        result = solve_routes(area, fleet, warm_start=loaded.outcome.snapped)
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    cards = [score(loaded.graph, r.route) for r in result.routes]
+    summary = {
+        "objective": result.objective.value,
+        "total_route_time_s": result.total_ms / _MS_PER_S,
+        "longest_route_time_s": result.longest_ms / _MS_PER_S,
+        "total_lower_bound_s": result.total_bound_ms / _MS_PER_S,
+        "gap": result.gap,
+        "balance_met": result.balance_met,
+        "unserved": dict(sorted(Counter(u.reason.value for u in result.unserved).items())),
+    }
+    if args.json:
+        report = {
+            "routes": [asdict(c) for c in cards],
+            "area": summary,
+            "osm_snapshot": loaded.graph.osm_snapshot,
+        }
+        print(json.dumps(report, indent=2))
+        return 0
+    print(f"Area: {args.stops}, {args.trucks} trucks, objective {result.objective.value}")
+    print(f"OSM snapshot: {loaded.graph.osm_snapshot}")
+    print()
+    width = max(len(label) for label, _, _ in _ROWS)
+    print(f"{'':<{width}}" + "".join(f"  {'Route ' + str(k + 1):>12}" for k in range(len(cards))))
+    for label, key, fmt in _ROWS:
+        values = [fmt.format(asdict(c)[key]) for c in cards]
+        print(f"{label:<{width}}" + "".join(f"  {v:>12}" for v in values))
+    print()
+    total, longest = result.total_ms / _MS_PER_S, result.longest_ms / _MS_PER_S
+    bound = result.total_bound_ms / _MS_PER_S
+    print(f"Total route time {total:,.0f} s, longest {longest:,.0f} s")
+    print(f"Best found; at most {result.gap:.1%} above the lower bound of {bound:,.0f} s")
+    print("Routes within the balance margin" if result.balance_met else "Balance margin not met")
     _print_footer(loaded)
     return 0
 
@@ -278,6 +329,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         "optimize", help="solve the optimized route and compare it with the current one"
     )
     _common(optimize_parser)
+    optimize_parser.add_argument(
+        "--trucks", type=int, default=1, metavar="N", help="split the area into N routes"
+    )
+    optimize_parser.add_argument(
+        "--objective",
+        choices=[o.value for o in RouteObjective],
+        default=RouteObjective.BALANCED_TOTAL.value,
+        help="what best means for several routes (default: %(default)s)",
+    )
     optimize_parser.set_defaults(handler=optimize_command)
     args = parser.parse_args(argv)
     result: int = args.handler(args)
