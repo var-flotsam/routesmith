@@ -16,7 +16,6 @@ from enum import StrEnum
 from shapely import LineString, Point, STRtree
 
 from starboard.geo.projection import LocalProjection
-from starboard.geo.street_names import same_street_name
 from starboard.solver import defaults
 from starboard.solver.graph import (
     CurbSide,
@@ -27,6 +26,7 @@ from starboard.solver.graph import (
     StateGraph,
     StreetSegment,
 )
+from starboard.solver.street_names import same_street_name
 
 # Half-length of the stretch of line used to read its direction at the snap point.
 _TANGENT_HALF_LENGTH_M = 0.5
@@ -155,6 +155,7 @@ class Snapper:
             distance_from_centerline_m=distance,
             side_of_forward=side,
             required_pass=Pass(best_id, direction),
+            street=stop.street,
         )
 
 

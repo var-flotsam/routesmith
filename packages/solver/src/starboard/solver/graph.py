@@ -111,6 +111,7 @@ class SnappedStop:
     `distance_along_m` is measured from the segment's `from_node`.
     `side_of_forward` is the curb the stop is on when travelling the segment
     forward; `required_pass` is the pass that has it on the truck's right.
+    `street` is the street named in the stop's address, when it has one.
     """
 
     stop_id: str
@@ -119,3 +120,4 @@ class SnappedStop:
     distance_from_centerline_m: float
     side_of_forward: CurbSide
     required_pass: Pass
+    street: str | None = None

@@ -1,6 +1,6 @@
 import pytest
 
-from starboard.geo.street_names import normalized_street_name, same_street_name
+from starboard.solver.street_names import normalized_street_name, same_street_name
 
 
 @pytest.mark.parametrize(

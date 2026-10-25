@@ -2,10 +2,14 @@
 
 The current-route baseline is held to the driving constraints every route
 must meet: no travel against a one-way, no restricted turn, and no U-turn
-the routing rules forbid. Solver output joins these tests in phase 3.
+the routing rules forbid. Every expected value here is worked out from the
+graph and stops directly, not by calling the code under test. Solver output
+joins these tests in phase 3.
 """
 
 import math
+from collections import defaultdict, deque
+from dataclasses import dataclass, replace
 
 import pytest
 from hypothesis import given
@@ -14,59 +18,146 @@ from hypothesis import strategies as st
 from starboard.geo.snapping import Snapper, StopPoint
 from starboard.geo.state_graph import RestrictionKind, TurnRestriction, build_state_graph
 from starboard.geo.synthetic import Grid
-from starboard.solver.baseline import RoutingRules, build_baseline
-from starboard.solver.graph import SnappedStop, StateGraph
+from starboard.solver import defaults
+from starboard.solver.baseline import DrivenRoute, build_baseline
+from starboard.solver.graph import Direction, LonLat, Pass, SnappedStop, StateGraph, StreetSegment
+from starboard.solver.rules import RoutingRules, UTurnPolicy
+from starboard.solver.scorecard import score
 
 pytestmark = pytest.mark.property
 
+ROAD_CLASSES = ["residential", "service", "unclassified", "tertiary", "secondary"]
+QUIET = {"residential", "unclassified", "living_street", "service"}  # the rule, restated
+STUB_LENGTH_M = 80.0
+
+
+@dataclass(frozen=True)
+class Scenario:
+    graph: StateGraph
+    stops: list[SnappedStop]
+    rules: RoutingRules
+    listed_street: dict[str, str]  # stop id -> the street the list puts it on
+
+
+def spellings(name: str) -> list[str]:
+    """Ways one street's name is written on a list."""
+    short = name.replace(" Street", " St").replace(" Avenue", " Ave").replace(" Court", " Ct")
+    return [name, short, name.lower(), short.upper() + "."]
+
 
 @st.composite
-def grids(draw: st.DrawFn) -> Grid:
+def networks(draw: st.DrawFn) -> tuple[Grid, list[StreetSegment]]:
     size = draw(st.integers(3, 5))
     rows = list(range(size))
     east = draw(st.sets(st.sampled_from(rows), max_size=2))
     west = draw(st.sets(st.sampled_from([r for r in rows if r not in east]), max_size=2))
-    return Grid(size=size, one_way_east=frozenset(east), one_way_west=frozenset(west))
+    grid = Grid(size=size, one_way_east=frozenset(east), one_way_west=frozenset(west))
+    segments = [
+        replace(s, road_class=draw(st.sampled_from(ROAD_CLASSES))) if draw(st.booleans()) else s
+        for s in grid.segments()
+    ]
+    # Dead-end spurs south from the bottom row, some on busy road classes.
+    for index, col in enumerate(draw(st.sets(st.integers(0, size - 1), max_size=2))):
+        x = col * grid.block_m
+        segments.append(
+            StreetSegment(
+                segment_id=f"stub-{index}",
+                from_node=grid.node(0, col),
+                to_node=10_000 + index,
+                geometry=(grid.at(x, 0.0), grid.at(x, -STUB_LENGTH_M)),
+                length_m=STUB_LENGTH_M,
+                name=f"Stub {index} Court",
+                forward_allowed=True,
+                reverse_allowed=True,
+                road_class=draw(st.sampled_from(ROAD_CLASSES)),
+                osm_way_ids=(90_000 + index,),
+            )
+        )
+    return grid, segments
+
+
+def point_beside(grid: Grid, segment: StreetSegment, fraction: float, offset: float) -> LonLat:
+    (x0, y0), (x1, y1) = (grid.projection.to_xy(p) for p in segment.geometry)
+    length = math.hypot(x1 - x0, y1 - y0)
+    ux, uy = (x1 - x0) / length, (y1 - y0) / length
+    x = x0 + ux * length * fraction - uy * offset
+    y = y0 + uy * length * fraction + ux * offset
+    return grid.projection.to_lonlat(x, y)
 
 
 @st.composite
-def scenarios(draw: st.DrawFn) -> tuple[StateGraph, list[SnappedStop], RoutingRules]:
-    grid = draw(grids())
-    segments = grid.segments()
+def scenarios(draw: st.DrawFn) -> Scenario:
+    grid, segments = draw(networks())
     graph = build_state_graph(segments)
     restrictions = [
         TurnRestriction(
-            Grid.way_id(t.from_pass.segment_id),
+            graph.segments[t.from_pass.segment_id].osm_way_ids[0],
             t.via_node,
-            Grid.way_id(t.to_pass.segment_id),
+            graph.segments[t.to_pass.segment_id].osm_way_ids[0],
             RestrictionKind.PROHIBITORY,
         )
         for t in draw(st.lists(st.sampled_from(graph.transitions), max_size=4, unique=True))
     ]
     graph = build_state_graph(segments, restrictions=restrictions)
 
+    # Single stops anywhere, and sometimes a dense cluster on one street.
+    placements: list[StreetSegment] = draw(st.lists(st.sampled_from(segments), max_size=10))
+    if draw(st.booleans()):
+        cluster_on = draw(st.sampled_from(segments))
+        placements[draw(st.integers(0, len(placements))) : 0] = [cluster_on] * draw(
+            st.integers(7, 15)
+        )
+
     snapper = Snapper(graph)
     stops: list[SnappedStop] = []
-    projection = grid.projection
-    for index in range(draw(st.integers(1, 12))):
-        segment = draw(st.sampled_from(segments))
+    listed_street: dict[str, str] = {}
+    for index, segment in enumerate(placements):
         fraction = draw(st.floats(0.3, 0.7))
         offset = draw(st.floats(3.0, 20.0)) * draw(st.sampled_from([1.0, -1.0]))
-        (x0, y0), (x1, y1) = (projection.to_xy(p) for p in segment.geometry)
-        length = math.hypot(x1 - x0, y1 - y0)
-        ux, uy = (x1 - x0) / length, (y1 - y0) / length
-        x, y = x0 + ux * length * fraction - uy * offset, y0 + uy * length * fraction + ux * offset
-        result = snapper.snap(StopPoint(f"s{index}", projection.to_lonlat(x, y)))
+        assert segment.name is not None
+        address = draw(st.none() | st.sampled_from(spellings(segment.name)))
+        stop_id = f"s{index}"
+        result = snapper.snap(
+            StopPoint(stop_id, point_beside(grid, segment, fraction, offset), street=address)
+        )
         if isinstance(result, SnappedStop):
             stops.append(result)
-    rules = RoutingRules(u_turns_at_intersections=draw(st.booleans()))
-    return graph, stops, rules
+            snapped_name = graph.segments[result.segment_id].name
+            listed_street[stop_id] = segment.name if address else (snapped_name or "")
+    rules = RoutingRules(u_turns=draw(st.sampled_from(list(UTurnPolicy))))
+    return Scenario(graph, stops, rules, listed_street)
+
+
+def allowed_u_turn(scenario: Scenario, node: int) -> bool:
+    """Whether the rules allow a U-turn at `node`, worked out from scratch."""
+    graph, rules = scenario.graph, scenario.rules
+    touching = [
+        s for s in graph.segments.values() for end in (s.from_node, s.to_node) if end == node
+    ]
+    if len(touching) == 1:
+        return True  # a dead end
+    if rules.u_turns is UTurnPolicy.ANYWHERE:
+        return True
+    if rules.u_turns is UTurnPolicy.DEAD_ENDS_ONLY:
+        return False
+    stops_on = defaultdict(int)
+    for stop in scenario.stops:
+        stops_on[stop.segment_id] += 1
+    for segment in touching:
+        window_km = max(segment.length_m, defaults.U_TURN_DENSITY_WINDOW.value) / 1000
+        if segment.road_class not in QUIET:
+            return False
+        if stops_on[segment.segment_id] / window_km >= defaults.U_TURN_MAX_STOP_DENSITY.value:
+            return False
+    return True
 
 
 @given(scenarios())
 def test_the_baseline_drives_only_legal_passes_and_turns(scenario):
-    graph, stops, rules = scenario
-    route = build_baseline(graph, stops, rules)
+    graph = scenario.graph
+    route = build_baseline(graph, scenario.stops, scenario.rules)
+    nodes = {n for s in graph.segments.values() for n in (s.from_node, s.to_node)}
+    assert route.u_turn_nodes == {n for n in nodes if allowed_u_turn(scenario, n)}
     passes = set(graph.passes)
     transitions = set(graph.transitions)
 
@@ -79,7 +170,7 @@ def test_the_baseline_drives_only_legal_passes_and_turns(scenario):
         assert transition in transitions
         assert not transition.forbidden_by_restriction
         if transition.is_u_turn:
-            assert rules.u_turns_at_intersections or transition.via_node in graph.dead_end_nodes
+            assert allowed_u_turn(scenario, transition.via_node)
         assert transition.from_pass == route.traversals[index].on_pass
         assert transition.to_pass == route.traversals[index + 1].on_pass
         assert route.traversals[index].end_m == pytest.approx(
@@ -88,20 +179,112 @@ def test_the_baseline_drives_only_legal_passes_and_turns(scenario):
         assert route.traversals[index + 1].start_m == 0.0
 
 
-@given(scenarios())
-def test_the_baseline_services_every_reachable_stop_once_in_order(scenario):
-    graph, stops, rules = scenario
-    route = build_baseline(graph, stops, rules)
-    serviced = [stop_id for t in route.traversals for stop_id in t.serviced_stop_ids]
-    unreachable = set(route.unreachable_stop_ids)
-    assert serviced == [s.stop_id for s in stops if s.stop_id not in unreachable]
+def _path_distance(
+    route: DrivenRoute, earlier: tuple[int, float], later: tuple[int, float]
+) -> float:
+    """Distance driven from one point on the route to a later one."""
+    (i, at_i), (j, at_j) = earlier, later
+    if i == j:
+        return at_j - at_i
+    distance = route.traversals[i].end_m - at_i
+    distance += sum(t.end_m - t.start_m for t in route.traversals[i + 1 : j])
+    return distance + at_j - route.traversals[j].start_m
 
-    servicing_pass = {
-        stop_id: t.on_pass for t in route.traversals for stop_id in t.serviced_stop_ids
-    }
-    expected_wrong_side = [
-        s.stop_id
-        for s in stops
-        if s.stop_id in servicing_pass and servicing_pass[s.stop_id] != s.required_pass
-    ]
-    assert list(route.wrong_side_stop_ids) == expected_wrong_side
+
+def _reachable_after(scenario: Scenario, start: Pass) -> set[Pass]:
+    """Every pass the truck can enter after leaving `start`, under the rules."""
+    outgoing = defaultdict(list)
+    for t in scenario.graph.transitions:
+        if t.forbidden_by_restriction or (t.is_u_turn and not allowed_u_turn(scenario, t.via_node)):
+            continue
+        outgoing[t.from_pass].append(t.to_pass)
+    seen: set[Pass] = set()
+    queue = deque(outgoing[start])
+    while queue:
+        current = queue.popleft()
+        if current not in seen:
+            seen.add(current)
+            queue.extend(outgoing[current])
+    return seen
+
+
+@given(scenarios())
+def test_the_baseline_services_each_street_in_list_order_and_each_stop_once(scenario):
+    graph, stops = scenario.graph, scenario.stops
+    route = build_baseline(graph, stops, scenario.rules)
+    by_id = {s.stop_id: s for s in stops}
+    unreachable = set(route.unreachable_stop_ids)
+    picked = [p.stop_id for p in route.pickups]
+    assert len(picked) == len(set(picked))
+    assert set(picked) | unreachable == set(by_id)
+    assert not set(picked) & unreachable
+
+    # Streets come in list order, however their names are spelled; within a street,
+    # any order.
+    runs: list[set[str]] = []
+    previous = None
+    for stop in stops:
+        street = scenario.listed_street[stop.stop_id].casefold()
+        if street != previous:
+            runs.append(set())
+            previous = street
+        runs[-1].add(stop.stop_id)
+    position = 0
+    for run in (r - unreachable for r in runs):
+        assert set(picked[position : position + len(run)]) == run
+        position += len(run)
+    assert position == len(picked)
+
+    serviced = sorted(stop_id for t in route.traversals for stop_id in t.serviced_stop_ids)
+    assert serviced == sorted(picked)
+
+    # A stop is only unreachable if the truck truly cannot get to it.
+    legal = set(graph.passes)
+    if route.traversals:
+        last = route.traversals[-1]
+        after = _reachable_after(scenario, last.on_pass)
+        for stop_id in unreachable:
+            stop = by_id[stop_id]
+            candidates = {Pass(stop.segment_id, d) for d in Direction} & legal
+            assert not candidates & after, stop_id
+            if last.on_pass in candidates:  # only if it is behind where the truck stopped
+                length = graph.segments[stop.segment_id].length_m
+                along = min(max(stop.distance_along_m, 0.0), length)
+                at = along if last.on_pass.direction is Direction.FORWARD else length - along
+                assert at < last.end_m, stop_id
+    else:
+        for stop_id in unreachable:
+            assert not {Pass(by_id[stop_id].segment_id, d) for d in Direction} & legal
+
+    truck = None  # the furthest point reached so far
+    for pickup in route.pickups:
+        stop = by_id[pickup.stop_id]
+        traversal = route.traversals[pickup.traversal_index]
+        # The stop is collected where it is, from the pass the truck was on.
+        assert traversal.on_pass.segment_id == stop.segment_id
+        assert traversal.start_m - 1e-6 <= pickup.at_m <= traversal.end_m + 1e-6
+        length = graph.segments[stop.segment_id].length_m
+        along = min(max(stop.distance_along_m, 0.0), length)
+        expected_at = along if traversal.on_pass.direction is Direction.FORWARD else length - along
+        assert pickup.at_m == pytest.approx(expected_at)
+        assert pickup.wrong_side == (traversal.on_pass != stop.required_pass)
+        # A stop behind the truck is only ever one it passed within the pass-by window.
+        point = (pickup.traversal_index, pickup.at_m)
+        if truck is None or point >= truck:
+            truck = point
+        else:
+            assert _path_distance(route, point, truck) <= defaults.PASS_BY_DISTANCE.value + 1e-6
+
+
+@given(scenarios())
+def test_route_time_is_driving_plus_collection_plus_wrong_side_extra(scenario):
+    card = score(scenario.graph, build_baseline(scenario.graph, scenario.stops, scenario.rules))
+    assert card.service_time_s == pytest.approx(
+        card.stops_serviced * defaults.CART_SERVICE_TIME.value
+    )
+    assert card.wrong_side_time_s == pytest.approx(
+        card.wrong_side_pickups * defaults.WRONG_SIDE_PICKUP_TIME.value
+    )
+    assert card.route_time_s == pytest.approx(
+        card.drive_time_s + card.service_time_s + card.wrong_side_time_s
+    )

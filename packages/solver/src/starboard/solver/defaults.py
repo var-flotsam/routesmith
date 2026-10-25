@@ -135,6 +135,68 @@ TURN_MIN_ANGLE = Tunable(
 )
 
 
+# Pickups and turnarounds (packages/solver)
+
+WRONG_SIDE_PICKUP_TIME = Tunable(
+    value=64.0,
+    unit="s",
+    reason=(
+        "Extra time for a cart on the truck's left, which the driver leaves the cab to bring to "
+        "the arm. Stated default carried over from the nearest public measurement: in "
+        "Rochester, NY, semi-automated collection with tippers timed stops where the operator "
+        "walked to the left side of one-way streets to roll out, tip and return carts at 110 s, "
+        "against 46.2 s for a normal semi-automated stop, 63.8 s more (D. De Roze, 'Rochester "
+        "Gets A Lift From Automation', Waste Age, 1 Oct 1996)."
+    ),
+    source="https://www.waste360.com/industry-insights/rochester-gets-a-lift-from-automation",
+)
+
+CART_SERVICE_TIME = Tunable(
+    value=12.0,
+    unit="s",
+    reason=(
+        "Time at the stop to collect one cart with the arm, driving excluded: measured at "
+        "11-12 s per residence for automated residual collection (Jaunich et al. 2016, Resources, "
+        "Conservation & Recycling 114:92-102)."
+    ),
+    source="https://doi.org/10.1016/j.resconrec.2016.07.012",
+)
+
+PASS_BY_DISTANCE = Tunable(
+    value=30.0,
+    unit="m",
+    reason=(
+        "A stop this close behind the truck on the same street was passed moments ago; a "
+        "driver working a two-sided house-number list collects it then, rather than looping "
+        "round the block. About two house frontages on a compact suburban street."
+    ),
+)
+
+U_TURN_MAX_STOP_DENSITY = Tunable(
+    value=32.0,
+    unit="stops/km",
+    reason=(
+        "A street with fewer stops per km than this (both curbs counted) is too sparse to be a "
+        "'residence district' under California Vehicle Code section 515, which starts at 13 "
+        "dwellings fronting one side within a quarter mile (32.3 per km); section 22103 "
+        "restricts U-turns in residence districts. It is the low-density cut-off for "
+        "intersection U-turns, applied to every street that meets at the intersection."
+    ),
+    source="https://codes.findlaw.com/ca/vehicle-code/veh-sect-515/",
+)
+
+U_TURN_DENSITY_WINDOW = Tunable(
+    value=402.3,
+    unit="m",
+    reason=(
+        "Shortest length a street's stop density is measured over: the quarter mile of "
+        "California Vehicle Code section 515, so a short block's few stops are not read as a "
+        "high density."
+    ),
+    source="https://codes.findlaw.com/ca/vehicle-code/veh-sect-515/",
+)
+
+
 def all_tunables() -> dict[str, Tunable]:
     """Every module-level `Tunable` in this file, keyed by name."""
     found: dict[str, Tunable] = {}
