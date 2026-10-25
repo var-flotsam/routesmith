@@ -63,3 +63,30 @@
 - Demo-town tests (`pytest -m demo`) and `starboard score data/demo/stops.csv`
   have not run since #8: the public Overpass server stopped answering this
   machine. Re-run both once it answers.
+
+## 2026-10-25 (later)
+
+**Done**
+
+- #14: networks from a local OSM extract (Geofabrik); Overpass stopped
+  answering this machine.
+- #15: ADR-0003, multiple routes per area (districts first, then the
+  single-route solver); scope change recorded in HANDOFF §1, §4, §6.
+- #16: two-way OSM streets no longer split into one-ways; cut-off edge nodes
+  are not dead ends.
+- #17: current route driven street by street; wrong-side pickups cost 64 s;
+  pick up in passing; low-density U-turns; route time on the scorecard.
+  Byram: 91 km, 7.1 h, 712 stops, 30 wrong-side pickups.
+- Owner kept the ADR-0003 defaults (HANDOFF §6 item 5).
+
+**Next (phase 3)**
+
+- Single-route solver with yard, disposal site and capacity, then the
+  multi-route steps in ADR-0003's delivery list.
+- `DISPOSAL_UNLOAD_TIME` needs a public figure.
+- The synthetic demo order jumps between streets alphabetically (about 50 km
+  of the 91 km); revisit once the solver exists.
+
+**Blocked**
+
+- Nothing.

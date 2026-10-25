@@ -135,7 +135,7 @@ benchmark at 1,000, 3,000 and 10,000 stops sets the search budgets.
 
 | Name | Default | Reason |
 | --- | --- | --- |
-| `BALANCE_MARGIN` | 0.10 | Each route within 10% of the average route time: about 45 minutes on a 7.5-hour shift. Stated default; the owner sets the final value. |
+| `BALANCE_MARGIN` | 0.10 | Each route within 10% of the average route time: about 45 minutes on a 7.5-hour shift. Confirmed by the owner, 2026-10-25. |
 | `MULTI_ROUTE_TIME_LIMIT_PER_ROUTE` | 180 s | Wall-clock safety ceiling per route, matching the single-route target; budgets counted in work normally stop the run first. |
 | `BOUNDARY_CUT_COST` | 30 s per cut | Charged per pair of adjacent residential units in different districts, so boundaries fall on arterial roads. |
 | `COMPACTNESS_WEIGHT` | 0.1 | Weight on summed unit-to-centre time, so districts are compact rather than long and thin. |
