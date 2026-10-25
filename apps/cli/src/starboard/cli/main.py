@@ -14,7 +14,8 @@ from starboard.cli.stop_file import read_stop_file
 from starboard.geo.extract import download_extract
 from starboard.geo.osm import DEFAULT_CACHE_DIR, bbox_around, fetch_network
 from starboard.geo.snapping import snap_stops
-from starboard.solver.baseline import RoutingRules, build_baseline
+from starboard.solver.baseline import build_baseline
+from starboard.solver.rules import RoutingRules, UTurnPolicy
 from starboard.solver.scorecard import Scorecard, score
 
 # Room around the outermost stops for the streets that bound them.
@@ -22,7 +23,10 @@ NETWORK_MARGIN_M = 300.0
 
 _ROWS = (
     ("Distance", "distance_m", "{:,.0f} m"),
-    ("Drive time", "drive_time_s", "{:,.0f} s"),
+    ("Route time", "route_time_s", "{:,.0f} s"),
+    ("  driving", "drive_time_s", "{:,.0f} s"),
+    ("  collecting carts", "service_time_s", "{:,.0f} s"),
+    ("  wrong-side extra", "wrong_side_time_s", "{:,.0f} s"),
     ("Left turns", "left_turns", "{:,}"),
     ("Right turns", "right_turns", "{:,}"),
     ("U-turns", "u_turns", "{:,}"),
@@ -65,9 +69,7 @@ def score_command(args: argparse.Namespace) -> int:
         print(f"could not fetch the OSM street network: {error}", file=sys.stderr)
         return 2
     outcome = snap_stops(graph, stop_file.stops)
-    route = build_baseline(
-        graph, outcome.snapped, RoutingRules(u_turns_at_intersections=args.allow_u_turns)
-    )
+    route = build_baseline(graph, outcome.snapped, RoutingRules(u_turns=UTurnPolicy(args.u_turns)))
     card = score(graph, route)
     review = Counter(item.reason.value for item in outcome.review)
 
@@ -100,7 +102,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     score_parser.add_argument("stops", type=Path, help="stop CSV, as in data/demo/stops.csv")
     score_parser.add_argument("--json", action="store_true", help="print the report as JSON")
     score_parser.add_argument(
-        "--allow-u-turns", action="store_true", help="allow U-turns at intersections"
+        "--u-turns",
+        choices=[policy.value for policy in UTurnPolicy],
+        default=UTurnPolicy.LOW_DENSITY.value,
+        help="where U-turns are allowed besides dead ends (default: %(default)s)",
     )
     score_parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE_DIR)
     score_parser.add_argument(

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from starboard.solver import defaults
 from starboard.solver.baseline import DrivenRoute
 from starboard.solver.costs import drive_seconds, is_left_turn, is_right_turn, turn_seconds
 from starboard.solver.graph import StateGraph
@@ -9,11 +10,20 @@ from starboard.solver.graph import StateGraph
 
 @dataclass(frozen=True, slots=True)
 class Scorecard:
-    """`drive_time_s` includes turn costs. `dead_head_m` is distance on passes that service
-    no stop. `street_passes` counts traversals of a segment in one direction."""
+    """The measures for one route.
+
+    `drive_time_s` is time moving, turn costs included. `service_time_s` is
+    collecting carts with the arm; `wrong_side_time_s` is the extra for carts
+    picked up from the left. `route_time_s` is all three together.
+    `dead_head_m` is distance on passes that service no stop, and
+    `street_passes` counts traversals of a segment in one direction.
+    """
 
     distance_m: float
     drive_time_s: float
+    service_time_s: float
+    wrong_side_time_s: float
+    route_time_s: float
     left_turns: int
     right_turns: int
     u_turns: int
@@ -34,15 +44,21 @@ def score(graph: StateGraph, route: DrivenRoute) -> Scorecard:
         drive_time += drive_seconds(graph.segments[traversal.on_pass.segment_id], length)
         if not traversal.serviced_stop_ids:
             dead_head += length
+    stops_serviced = sum(len(t.serviced_stop_ids) for t in route.traversals)
+    service_time = stops_serviced * defaults.CART_SERVICE_TIME.value
+    wrong_side_time = len(route.wrong_side_stop_ids) * defaults.WRONG_SIDE_PICKUP_TIME.value
     return Scorecard(
         distance_m=distance,
         drive_time_s=drive_time,
+        service_time_s=service_time,
+        wrong_side_time_s=wrong_side_time,
+        route_time_s=drive_time + service_time + wrong_side_time,
         left_turns=sum(is_left_turn(t) for t in route.transitions),
         right_turns=sum(is_right_turn(t) for t in route.transitions),
         u_turns=sum(t.is_u_turn for t in route.transitions),
         wrong_side_pickups=len(route.wrong_side_stop_ids),
         dead_head_m=dead_head,
         street_passes=len(route.traversals),
-        stops_serviced=sum(len(t.serviced_stop_ids) for t in route.traversals),
+        stops_serviced=stops_serviced,
         stops_unreachable=len(route.unreachable_stop_ids),
     )
