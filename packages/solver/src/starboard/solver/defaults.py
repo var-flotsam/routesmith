@@ -274,6 +274,17 @@ DEAD_HEAD_ESTIMATE_FACTOR = Tunable(
 )
 
 
+BALANCE_MARGIN = Tunable(
+    value=0.10,
+    unit="fraction of the average route time",
+    reason=(
+        "Under the balanced-total objective every route stays within this share of the average "
+        "route time, about 45 minutes on a 7.5-hour shift; the owner's choice (HANDOFF.md "
+        "section 6, item 5)."
+    ),
+)
+
+
 def all_tunables() -> dict[str, Tunable]:
     """Every module-level `Tunable` in this file, keyed by name."""
     found: dict[str, Tunable] = {}
