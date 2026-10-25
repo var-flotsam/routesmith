@@ -11,6 +11,7 @@ dev = [
   "mypy>=1.11",
   "pytest>=8.2",
   "ruff>=0.6",
+  "scipy-stubs>=1.18.1.1",
   "types-networkx>=3.6.1.20261024",
   "types-shapely>=2.1.0.20260728",
 ]
