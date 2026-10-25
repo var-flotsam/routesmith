@@ -23,7 +23,7 @@ def stops_csv(tmp_path):
 
 def test_score_prints_the_scorecard_as_json(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(
-        cli, "fetch_network", lambda bbox, cache_dir: build_state_graph(GRID.segments())
+        cli, "fetch_network", lambda bbox, cache_dir, extract: build_state_graph(GRID.segments())
     )
     assert cli.main(["score", str(stops_csv(tmp_path)), "--json"]) == 0
     report = json.loads(capsys.readouterr().out)
@@ -35,7 +35,7 @@ def test_score_prints_the_scorecard_as_json(tmp_path, monkeypatch, capsys):
 
 
 def test_score_reports_a_network_failure_without_a_traceback(tmp_path, monkeypatch, capsys):
-    def unreachable(bbox, cache_dir):
+    def unreachable(bbox, cache_dir, extract):
         raise requests.ConnectTimeout("timed out")
 
     monkeypatch.setattr(cli, "fetch_network", unreachable)

@@ -23,6 +23,7 @@ import networkx as nx
 import osmnx as ox
 import requests
 
+from starboard.geo.extract import clip_extract, extract_timestamp
 from starboard.geo.projection import EARTH_MEAN_RADIUS_M
 from starboard.geo.state_graph import RestrictionKind, TurnRestriction, build_state_graph
 from starboard.solver.graph import LonLat, StateGraph, StreetSegment
@@ -209,11 +210,15 @@ def _fetch_restriction_relations(bbox: BoundingBox) -> dict[str, Any]:
     return body
 
 
-def fetch_network(bbox: BoundingBox, cache_dir: Path = DEFAULT_CACHE_DIR) -> StateGraph:
-    """The state graph for `bbox`, from the on-disk cache or a fresh Overpass fetch.
+def fetch_network(
+    bbox: BoundingBox, cache_dir: Path = DEFAULT_CACHE_DIR, extract: Path | None = None
+) -> StateGraph:
+    """The state graph for `bbox`, from the on-disk cache or freshly built.
 
-    OSMnx keeps its raw Overpass responses in `cache_dir/overpass/<bbox key>/`;
-    the OSM timestamp is read from the responses for this bounding box.
+    With `extract`, the network and its turn restrictions come from that local
+    OSM file and the OSM timestamp from its header. Otherwise they come from
+    Overpass: OSMnx keeps its raw responses in `cache_dir/overpass/<bbox key>/`
+    and the OSM timestamp is read from them.
     """
     graphml = cache_dir / f"{bbox.cache_key()}.graphml"
     sidecar = graphml.with_suffix(".json")
@@ -221,6 +226,20 @@ def fetch_network(bbox: BoundingBox, cache_dir: Path = DEFAULT_CACHE_DIR) -> Sta
     if graphml.exists() and sidecar.exists():
         graph = ox.load_graphml(graphml)
         snapshot = json.loads(sidecar.read_text(encoding="utf-8"))
+    elif extract is not None:
+        xml = cache_dir / "clipped" / f"{bbox.cache_key()}.osm"
+        relations = clip_extract(extract, bbox, xml)
+        graph = ox.graph_from_xml(xml, retain_all=False)
+        ox.save_graphml(graph, graphml)
+        restrictions_file.write_text(json.dumps(relations), encoding="utf-8")
+        snapshot = asdict(
+            NetworkSnapshot(
+                bbox=bbox,
+                fetched_at=datetime.now(UTC).isoformat(timespec="seconds"),
+                osm_timestamp=extract_timestamp(extract),
+            )
+        )
+        sidecar.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
     else:
         responses_dir = cache_dir / "overpass" / bbox.cache_key()
         responses_dir.mkdir(parents=True, exist_ok=True)

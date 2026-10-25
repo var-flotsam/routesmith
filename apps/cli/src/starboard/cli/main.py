@@ -11,6 +11,7 @@ from pathlib import Path
 import requests
 
 from starboard.cli.stop_file import read_stop_file
+from starboard.geo.extract import download_extract
 from starboard.geo.osm import DEFAULT_CACHE_DIR, bbox_around, fetch_network
 from starboard.geo.snapping import snap_stops
 from starboard.solver.baseline import RoutingRules, build_baseline
@@ -39,6 +40,15 @@ def _table(card: Scorecard) -> str:
     return "\n".join(f"{label:<{width}}  {fmt.format(values[key])}" for label, key, fmt in _ROWS)
 
 
+def _extract_path(value: str | None, cache_dir: Path) -> Path | None:
+    """A local extract path as given, or a URL downloaded into the cache."""
+    if value is None:
+        return None
+    if value.startswith(("https://", "http://")):
+        return download_extract(value, cache_dir / "extracts")
+    return Path(value)
+
+
 def score_command(args: argparse.Namespace) -> int:
     stop_file = read_stop_file(args.stops)
     if not stop_file.stops:
@@ -49,7 +59,8 @@ def score_command(args: argparse.Namespace) -> int:
 
     bbox = bbox_around((s.location for s in stop_file.stops), NETWORK_MARGIN_M)
     try:
-        graph = fetch_network(bbox, cache_dir=args.cache_dir)
+        extract = _extract_path(args.osm_extract, args.cache_dir)
+        graph = fetch_network(bbox, cache_dir=args.cache_dir, extract=extract)
     except requests.RequestException as error:
         print(f"could not fetch the OSM street network: {error}", file=sys.stderr)
         return 2
@@ -92,6 +103,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--allow-u-turns", action="store_true", help="allow U-turns at intersections"
     )
     score_parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE_DIR)
+    score_parser.add_argument(
+        "--osm-extract",
+        metavar="PATH_OR_URL",
+        help="build the network from an OSM extract (.osm.pbf) instead of Overpass",
+    )
     score_parser.set_defaults(handler=score_command)
     args = parser.parse_args(argv)
     result: int = args.handler(args)
