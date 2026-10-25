@@ -104,6 +104,10 @@ def test_costs_between_passes_match_an_independent_dijkstra(network):
             for b in graph.passes:
                 if b != a:
                     assert costs.between(a, b) == expected.get(b, UNREACHABLE), (a, b, places)
+        matrix = costs.between_all(anchors)
+        for i, a in enumerate(anchors):
+            for j, b in enumerate(anchors):
+                assert matrix[i, j] == (UNREACHABLE if a == b else costs.between(a, b))
 
 
 def _walk_cost(graph, allowed_u, start: Pass, steps, transitions) -> tuple[int, Pass]:

@@ -24,6 +24,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
+import numpy as np
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2, routing_parameters_pb2
 
 from starboard.solver import defaults
@@ -135,6 +136,20 @@ def _pass_key(p: Pass) -> tuple[str, str]:
     return (p.segment_id, p.direction.value)
 
 
+class PairTable:
+    """`table[(a, b)]`: a cost in ms for every ordered pair of one set of passes."""
+
+    __slots__ = ("_index", "_rows")
+
+    def __init__(self, index: dict[Pass, int], rows: list[list[int]]) -> None:
+        self._index = index
+        self._rows = rows
+
+    def __getitem__(self, key: tuple[Pass, Pass]) -> int:
+        a, b = key
+        return self._rows[self._index[a]][self._index[b]]
+
+
 class PlanCosts:
     """Plan costs in integer milliseconds over one set of required passes.
 
@@ -159,15 +174,18 @@ class PlanCosts:
         yard, disposal = sites.yard, sites.disposal
         self.return_ms = _known(connections.between_places(disposal, yard))
         passes = list(carts)
-        self.link_ms = {
-            (a, b): _known(connections.between(a, b)) for a in passes for b in passes if a != b
-        }
         self.open_ms = {p: _known(connections.from_place(yard, p)) for p in passes}
         self.to_disposal_ms = {p: _known(connections.to_place(p, disposal)) for p in passes}
         self.from_disposal_ms = {p: _known(connections.from_place(disposal, p)) for p in passes}
-        self.pair_ms = {
-            (a, b): min(link, self.via_disposal(a, b)) for (a, b), link in self.link_ms.items()
-        }
+        # Dense tables, built in one step: a dict per pair took over 100 MB at 650 passes.
+        links = connections.between_all(passes)
+        links[links == UNREACHABLE] = _NO_ARC_MS
+        to_disposal = np.array([self.to_disposal_ms[p] for p in passes], dtype=np.int64)
+        from_disposal = np.array([self.from_disposal_ms[p] for p in passes], dtype=np.int64)
+        via = to_disposal[:, None] + self.unload_ms + from_disposal[None, :]
+        index = {p: k for k, p in enumerate(passes)}
+        self.link_ms = PairTable(index, links.tolist())
+        self.pair_ms = PairTable(index, np.minimum(links, via).tolist())
         self.first_load_only = frozenset(
             p for p in passes if self.from_disposal_ms[p] == _NO_ARC_MS
         )

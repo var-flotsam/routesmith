@@ -19,6 +19,7 @@ import itertools
 from collections.abc import Iterable, Sequence
 
 import numpy as np
+import numpy.typing as npt
 from scipy.sparse import csr_array
 from scipy.sparse.csgraph import dijkstra
 
@@ -155,6 +156,21 @@ class ConnectionCosts:
             raise ValueError("a connection joins two different passes")
         target = self._index[b]
         return self._vertex_cost(self._index[a], target, int(self._traversal[target]))
+
+    def between_all(self, passes: Sequence[Pass]) -> npt.NDArray[np.int64]:
+        """`between(a, b)` for every ordered pair of `passes` at once, as a matrix.
+
+        Every pass must be an anchor; the diagonal is UNREACHABLE.
+        """
+        targets = np.array([self._index[p] for p in passes], dtype=np.int64)
+        rows = np.array([self._row[self._index[p]] for p in passes], dtype=np.int64)
+        block = self._distances[np.ix_(rows, targets)]
+        reachable = np.isfinite(block)
+        costs = np.rint(np.where(reachable, block, 0.0)).astype(np.int64)
+        costs -= self._traversal[targets][None, :]
+        costs[~reachable] = UNREACHABLE
+        np.fill_diagonal(costs, UNREACHABLE)
+        return costs
 
     def from_place(self, place: Place, b: Pass) -> int:
         """Milliseconds from leaving `place` to the start of `b`, or UNREACHABLE."""
