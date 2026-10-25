@@ -90,20 +90,25 @@ class _Area:
         return self._cache[key]
 
     def components(self, members: set[str]) -> int:
-        seen: set[str] = set()
-        count = 0
-        for start in sorted(members):
-            if start in seen:
-                continue
-            count += 1
-            stack = [start]
-            seen.add(start)
-            while stack:
-                for nxt in self.units.neighbours[stack.pop()]:
-                    if nxt in members and nxt not in seen:
-                        seen.add(nxt)
-                        stack.append(nxt)
-        return count
+        return pieces(self.units, members)
+
+
+def pieces(units: UnitGraph, members: set[str]) -> int:
+    """How many pieces, connected along the streets, a set of units falls into."""
+    seen: set[str] = set()
+    count = 0
+    for start in sorted(members):
+        if start in seen:
+            continue
+        count += 1
+        stack = [start]
+        seen.add(start)
+        while stack:
+            for nxt in units.neighbours[stack.pop()]:
+                if nxt in members and nxt not in seen:
+                    seen.add(nxt)
+                    stack.append(nxt)
+    return count
 
 
 def _seeds(area: _Area, trucks: int, from_yard: Mapping[str, int]) -> list[str]:

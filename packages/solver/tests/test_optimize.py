@@ -11,15 +11,15 @@ from starboard.geo.synthetic import Grid
 from starboard.solver.connections import ConnectionCosts
 from starboard.solver.graph import Place, SnappedStop, StreetSegment
 from starboard.solver.optimize import (  # the private names are tested against brute force
-    _INFEASIBLE_MS,
+    INFEASIBLE_MS,
+    PlanCosts,
     RouteSites,
     SolveSettings,
     TruckProfile,
     UnservedReason,
-    _Costs,
-    _improve,
     _required_passes,
     _Sequence,
+    improve_plan,
     optimize,
 )
 from starboard.solver.route import PlaceVisit
@@ -123,7 +123,7 @@ def _costs_for(stops, capacity):
     stops_on, _ = _required_passes(GRAPH, stops)
     allowed = u_turn_nodes(GRAPH, stops, RoutingRules())  # the rules optimize() uses
     connections = ConnectionCosts(GRAPH, allowed, stops_on, [SITES.yard, SITES.disposal])
-    return _Costs(GRAPH, connections, SITES, {p: len(v) for p, v in stops_on.items()})
+    return PlanCosts(GRAPH, connections, SITES, {p: len(v) for p, v in stops_on.items()})
 
 
 PLACES = [(x, y) for x in (30, 70, 130, 170, 230, 270) for y in (-10, 90, 290)]
@@ -221,8 +221,8 @@ def test_local_search_ends_where_no_2_opt_or_or_opt_move_helps(places, capacity,
     order = sorted(costs.carts, key=lambda p: (p.segment_id, p.direction.value))
     rnd.shuffle(order)
     start = costs.best_unloads(order, capacity)
-    assume(start.cost_ms < _INFEASIBLE_MS)
-    improved = _improve(costs, start, capacity)
+    assume(start.cost_ms < INFEASIBLE_MS)
+    improved = improve_plan(costs, start, capacity)
     assert improved.cost_ms <= start.cost_ms
     sequence = list(improved.sequence)
     n = len(sequence)

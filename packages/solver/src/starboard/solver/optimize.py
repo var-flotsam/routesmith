@@ -50,7 +50,7 @@ _MS_PER_S = 1000
 # An arc the truck cannot drive costs this; no accepted plan uses one.
 _NO_ARC_MS = 10**9
 # The cost of an order no unloading plan can make legal; it is never accepted.
-_INFEASIBLE_MS = 10**15
+INFEASIBLE_MS = 10**15
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,7 +135,7 @@ def _pass_key(p: Pass) -> tuple[str, str]:
     return (p.segment_id, p.direction.value)
 
 
-class _Costs:
+class PlanCosts:
     """Plan costs in integer milliseconds over one set of required passes.
 
     `pair_ms[(a, b)]` is the cheaper of driving straight from `a` to `b` and
@@ -191,7 +191,7 @@ class _Costs:
     def best_unloads(self, sequence: Sequence[Pass], capacity: int | None) -> Plan:
         """The cheapest places to unload for this order, keeping every load within capacity.
 
-        An order that no unloading plan makes legal costs `_INFEASIBLE_MS`.
+        An order that no unloading plan makes legal costs `INFEASIBLE_MS`.
         """
         if not sequence:
             return Plan((), (), 0)
@@ -209,10 +209,10 @@ class _Costs:
         else:
             split = self._split(sequence, capacity)
             if split is None:
-                return Plan(tuple(sequence), (), _INFEASIBLE_MS)
+                return Plan(tuple(sequence), (), INFEASIBLE_MS)
             unloads = split
         cost = self.plan_cost(sequence, unloads)
-        return Plan(tuple(sequence), tuple(unloads), min(cost, _INFEASIBLE_MS))
+        return Plan(tuple(sequence), tuple(unloads), min(cost, INFEASIBLE_MS))
 
     def _split(self, sequence: Sequence[Pass], capacity: int) -> list[int] | None:
         """Unload points by dynamic programming over loads of consecutive passes.
@@ -281,7 +281,7 @@ class _LineGraphModel:
     route's total is its route time.
     """
 
-    def __init__(self, costs: _Costs, passes: list[Pass], disposal_visits: int) -> None:
+    def __init__(self, costs: PlanCosts, passes: list[Pass], disposal_visits: int) -> None:
         self.costs = costs
         self.passes = passes
         self.first_pass = 1
@@ -384,10 +384,10 @@ def _warm_nodes(model: _LineGraphModel, plan: Plan) -> list[int]:
     return nodes
 
 
-def _feasible_start(costs: _Costs, warm_order: list[Pass], capacity: int | None) -> Plan:
+def _feasible_start(costs: PlanCosts, warm_order: list[Pass], capacity: int | None) -> Plan:
     """A legal plan from the warm order: first-load-only passes moved first if needed."""
     plan = costs.best_unloads(warm_order, capacity)
-    if plan.cost_ms < _INFEASIBLE_MS:
+    if plan.cost_ms < INFEASIBLE_MS:
         return plan
     first = [p for p in warm_order if p in costs.first_load_only]
     rest = [p for p in warm_order if p not in costs.first_load_only]
@@ -395,7 +395,7 @@ def _feasible_start(costs: _Costs, warm_order: list[Pass], capacity: int | None)
 
 
 def _solve_order(
-    costs: _Costs,
+    costs: PlanCosts,
     passes: list[Pass],
     warm_plan: Plan,
     capacity: int | None,
@@ -444,7 +444,7 @@ def _solve_order(
 class _Sequence:
     """An order of passes with O(1) prices for 2-opt and or-opt moves on `pair_ms`."""
 
-    def __init__(self, costs: _Costs, sequence: list[Pass]) -> None:
+    def __init__(self, costs: PlanCosts, sequence: list[Pass]) -> None:
         self.costs = costs
         self.passes = sequence
         self.forward = [0]
@@ -489,7 +489,7 @@ class _Sequence:
         return removed - added
 
 
-def _improving_move(costs: _Costs, plan: Plan, capacity: int | None) -> Plan | None:
+def _improving_move(costs: PlanCosts, plan: Plan, capacity: int | None) -> Plan | None:
     """The first 2-opt or or-opt move whose best-unload plan beats `plan`, if any.
 
     With a capacity, a move that looks worse before unloads are placed can be better
@@ -499,7 +499,7 @@ def _improving_move(costs: _Costs, plan: Plan, capacity: int | None) -> Plan | N
     order = _Sequence(costs, list(plan.sequence))
     n = len(order.passes)
     exact = capacity is None or n <= defaults.EXACT_MOVE_PRICING_MAX_PASSES.value
-    floor = 0 if capacity is None or not exact else -_INFEASIBLE_MS
+    floor = 0 if capacity is None or not exact else -INFEASIBLE_MS
     for i in range(n):
         for j in range(i + 1, n):
             if order.two_opt_gain(i, j) > floor:
@@ -522,7 +522,7 @@ def _improving_move(costs: _Costs, plan: Plan, capacity: int | None) -> Plan | N
     return None
 
 
-def _improve(costs: _Costs, plan: Plan, capacity: int | None) -> Plan:
+def improve_plan(costs: PlanCosts, plan: Plan, capacity: int | None) -> Plan:
     """2-opt (reverse a stretch) and or-opt (move 1 to 3 passes) until no move improves.
 
     Moves are priced in O(1) on `pair_ms`, which is exact with no capacity limit;
@@ -677,7 +677,7 @@ def optimize(
         unserved.extend(UnservedStop(s.stop_id, reason) for s in stops_on.pop(p))
 
     passes = sorted(stops_on, key=_pass_key)
-    costs = _Costs(graph, connections, sites, {p: len(stops_on[p]) for p in passes})
+    costs = PlanCosts(graph, connections, sites, {p: len(stops_on[p]) for p in passes})
     listed = warm_start if warm_start is not None else stops
     warm_order = list(dict.fromkeys(s.required_pass for s in listed if s.required_pass in stops_on))
     in_order = set(warm_order)
@@ -689,7 +689,7 @@ def optimize(
         _solve_order(costs, passes, start, capacity, limit) if passes else ([], 0, False)
     )
     solved = costs.best_unloads(order, capacity)
-    plan = _improve(costs, solved if solved.cost_ms <= start.cost_ms else start, capacity)
+    plan = improve_plan(costs, solved if solved.cost_ms <= start.cost_ms else start, capacity)
     route = _Expansion(graph, connections, stops_on).route(sites, plan, allowed_u_turns)
     route = replace(route, unreachable_stop_ids=tuple(u.stop_id for u in unserved))
 

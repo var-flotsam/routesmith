@@ -1,6 +1,7 @@
 """Several routes in one area: invariant 5 and the checker, on random grids."""
 
 import math
+from collections import Counter, defaultdict
 from dataclasses import replace
 
 import pytest
@@ -11,12 +12,14 @@ from hypothesis import strategies as st
 from starboard.geo.snapping import Snapper, StopPoint
 from starboard.geo.state_graph import build_state_graph
 from starboard.geo.synthetic import Grid
+from starboard.solver.districts import pieces
 from starboard.solver.fleet import Area, FleetSettings, RouteSetError, check_route_set, solve_routes
 from starboard.solver.graph import Place, SnappedStop
 from starboard.solver.objectives import RouteObjective
 from starboard.solver.optimize import SolveSettings, optimize
 from starboard.solver.route import Pickup, RouteSites, TruckProfile
 from starboard.solver.rules import u_turn_nodes
+from starboard.solver.units import build_units
 
 SMALL = 30  # a small search keeps each example quick; the invariants hold at any size
 
@@ -89,6 +92,37 @@ def test_the_same_area_gives_the_same_routes(problem):
         return
     fleet = FleetSettings(trucks, solve=SolveSettings(profile, solution_limit=SMALL))
     assert solve_routes(area, fleet) == solve_routes(area, fleet)
+
+
+@given(areas())
+@settings_(deadline=None)
+def test_the_exchange_never_makes_the_route_set_worse(problem):
+    area, trucks, profile = problem
+    if not area.stops:
+        return
+    solve = SolveSettings(profile, solution_limit=SMALL)
+    without = solve_routes(area, FleetSettings(trucks, solve=solve, exchange=False))
+    with_exchange = solve_routes(area, FleetSettings(trucks, solve=solve))
+    assert with_exchange.key <= without.key
+
+
+@given(areas())
+@settings_(deadline=None)
+def test_no_district_is_split_on_a_connected_grid(problem):
+    area, trucks, profile = problem
+    if not area.stops:
+        return
+    result = solve_routes(
+        area, FleetSettings(trucks, solve=SolveSettings(profile, solution_limit=SMALL))
+    )
+    if result.unserved:
+        return  # the units below would then differ from the ones the districts were built on
+    units = build_units(area.graph, Counter(s.required_pass for s in area.stops))
+    members = defaultdict(set)
+    for u, d in result.district_of.items():
+        members[d].add(u)
+    for d in range(trucks):
+        assert pieces(units, members[d]) == 1, d
 
 
 def _small_area() -> Area:

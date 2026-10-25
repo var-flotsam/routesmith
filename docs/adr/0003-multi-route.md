@@ -84,13 +84,17 @@ The allowed U-turn set is computed once from all of the area's stops and passed
 to every solve, so low-density U-turns are judged on the whole street, not on
 one district's share of it.
 
-**Exchange.** Relocate a boundary unit, swap two boundary units, and 2-opt*
-tail exchange between two routes (Vidal 2017), on granular candidate lists of
-each unit's nearest units in other districts. A move is priced by splicing,
-re-optimised by the single-route local search on the two changed routes, and
-kept only if the objective improves on the re-solved times. Later PRs add a
-two-vehicle OR-Tools re-solve of adjacent pairs and an optional giant-tour
-split restart.
+**Exchange.** Relocate a boundary unit, or swap two boundary units, on
+granular candidate lists of each unit's nearest units in the other district.
+A move is priced by splicing, re-optimised by the single-route local search on
+the two changed routes, and kept only if the objective improves on the
+re-solved times. The changed districts are then solved again with OR-Tools,
+and the route set with the better acceptance key is kept, so the exchange
+never makes a result worse. Moves keep the partition's district rules (no
+district split into more pieces, none left without carts). 2-opt* tail
+exchange (Vidal 2017) is not used: a route's tail cuts across street units,
+so it would split streets and districts. Later PRs add a two-vehicle
+OR-Tools re-solve of adjacent pairs and an optional giant-tour split restart.
 
 **Objective.** Route time t_k is drive time with turn costs (yard and disposal
 legs included), cart service time and disposal unload time. Candidates are
