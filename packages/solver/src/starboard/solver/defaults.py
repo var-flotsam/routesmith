@@ -260,6 +260,20 @@ SPARE_DISPOSAL_VISITS = Tunable(
 )
 
 
+# Several routes in one area (ADR-0003)
+
+DEAD_HEAD_ESTIMATE_FACTOR = Tunable(
+    value=0.5,
+    unit="fraction of service driving",
+    reason=(
+        "Expected dead-head as a share of the driving a unit's passes need, for estimating "
+        "district workloads before any district is routed; on Byram the optimized route "
+        "dead-heads about 14 km against about 25 km of service driving (0.56). Later "
+        "estimates in a run use the measured ratio."
+    ),
+)
+
+
 def all_tunables() -> dict[str, Tunable]:
     """Every module-level `Tunable` in this file, keyed by name."""
     found: dict[str, Tunable] = {}
