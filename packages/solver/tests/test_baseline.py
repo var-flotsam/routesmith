@@ -5,7 +5,8 @@ from starboard.geo.state_graph import RestrictionKind, TurnRestriction, build_st
 from starboard.geo.synthetic import Grid
 from starboard.solver import defaults
 from starboard.solver.baseline import build_baseline
-from starboard.solver.graph import Direction, Pass, SnappedStop
+from starboard.solver.graph import Direction, Pass, Place, SnappedStop
+from starboard.solver.route import RouteSites, TruckProfile
 from starboard.solver.rules import RoutingRules, UTurnPolicy
 from starboard.solver.scorecard import score
 
@@ -187,3 +188,22 @@ def test_spellings_of_one_street_are_one_run():
     route = build_baseline(GRAPH, stops, DEAD_ENDS_ONLY)
     assert [p.stop_id for p in route.pickups] == ["start", "b", "a"]
     assert route.transitions == ()
+
+
+SITES = RouteSites(Place("yard", GRID.node(0, 0)), Place("disposal", GRID.node(3, 3)))
+
+
+def test_with_sites_the_current_route_runs_yard_to_disposal_to_yard():
+    route = build_baseline(GRAPH, [stop("a", 150, -10), stop("b", 250, 290)], sites=SITES)
+    assert route.start == route.end == SITES.yard
+    assert [v.place for v in route.place_visits] == [SITES.disposal]
+    assert route.traversals[0].start_m == 0.0
+    assert [p.stop_id for p in route.pickups] == ["a", "b"]
+
+
+def test_with_a_capacity_the_current_route_unloads_when_full():
+    stops = [stop(f"s{k}", x, -10) for k, x in enumerate((30, 70, 130, 170))]
+    route = build_baseline(GRAPH, stops, sites=SITES, profile=TruckProfile(capacity_carts=2))
+    unloads = [v for v in route.place_visits if v.unload]
+    assert len(unloads) == 2  # once when full, once at the end
+    assert score(GRAPH, route).disposal_visits == 2

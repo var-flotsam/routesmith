@@ -36,20 +36,20 @@ from starboard.solver.graph import (
     StateGraph,
     Transition,
 )
-from starboard.solver.route import DrivenRoute, Join, Pickup, PlaceVisit, Traversal
+from starboard.solver.route import (
+    DrivenRoute,
+    Join,
+    Pickup,
+    PlaceVisit,
+    RouteSites,
+    Traversal,
+    TruckProfile,
+)
 from starboard.solver.rules import RoutingRules, u_turn_nodes
 
 _MS_PER_S = 1000
 # An arc the truck cannot drive costs this; no accepted plan uses one.
 _NO_ARC_MS = 10**9
-
-
-@dataclass(frozen=True, slots=True)
-class TruckProfile:
-    """`capacity_carts` is how many carts fill the truck; `None` means one load suffices."""
-
-    capacity_carts: int | None = None
-    max_route_duration_s: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,12 +62,6 @@ class SolveSettings:
     profile: TruckProfile = field(default_factory=TruckProfile)
     rules: RoutingRules = field(default_factory=RoutingRules)
     solution_limit: int | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class RouteSites:
-    yard: Place
-    disposal: Place
 
 
 class UnservedReason(StrEnum):
