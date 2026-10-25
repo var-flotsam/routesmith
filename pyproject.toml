@@ -3,7 +3,7 @@ name = "routesmith"
 version = "0.0.0"
 description = "Starboard Routing workspace root"
 requires-python = ">=3.12,<3.13"
-dependencies = ["starboard-solver", "starboard-geo", "starboard-export"]
+dependencies = ["starboard-solver", "starboard-geo", "starboard-export", "starboard-cli"]
 
 [dependency-groups]
 dev = [
@@ -19,12 +19,13 @@ dev = [
 package = false
 
 [tool.uv.workspace]
-members = ["packages/*"]
+members = ["packages/*", "apps/cli"]
 
 [tool.uv.sources]
 starboard-solver = { workspace = true }
 starboard-geo = { workspace = true }
 starboard-export = { workspace = true }
+starboard-cli = { workspace = true }
 
 [tool.ruff]
 line-length = 100
@@ -43,13 +44,13 @@ known-first-party = ["starboard"]
 [tool.mypy]
 strict = true
 python_version = "3.12"
-files = ["packages/solver/src", "packages/geo/src", "packages/export/src"]
-mypy_path = ["packages/solver/src", "packages/geo/src", "packages/export/src"]
+files = ["packages/solver/src", "packages/geo/src", "packages/export/src", "apps/cli/src"]
+mypy_path = ["packages/solver/src", "packages/geo/src", "packages/export/src", "apps/cli/src"]
 namespace_packages = true
 explicit_package_bases = true
 
 [tool.pytest.ini_options]
-testpaths = ["packages"]
+testpaths = ["packages", "apps"]
 addopts = ["--import-mode=importlib", "--strict-markers"]
 markers = [
   "property: hypothesis property tests of the solver's hard constraints",
