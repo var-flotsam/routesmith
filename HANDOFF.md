@@ -42,6 +42,9 @@ What a hauler wants to know:
   and cul-de-sacs always allowed).
 - Route starts at a yard, ends at a yard, and visits a disposal site before
   the end (and when a capacity is given, whenever the load would exceed it).
+- When an area is split into N routes: exactly N routes, each serving at least
+  one stop; every stop served by exactly one route; every route starts and
+  ends at the shared yard and uses the shared disposal site.
 
 ### Soft costs (minimized, weights visible to the user)
 
@@ -52,9 +55,11 @@ What a hauler wants to know:
 
 ### Out of scope for v1
 
-Time windows, multiple trucks sharing one area (districting), commercial
-front-load or roll-off, live GPS tracking, mid-route dynamic re-sequencing.
-Each is a later product; do not design them in now.
+Time windows, commercial front-load or roll-off, live GPS tracking, mid-route
+dynamic re-sequencing, and, within an area split into several routes, trucks
+with different profiles or more than one yard or disposal site. Each is a
+later product; do not design them in now. Splitting one area into a given
+number of routes is in scope, as `docs/adr/0003-multi-route.md` describes.
 
 ---
 
@@ -180,8 +185,16 @@ Each phase ends with a PR, green CI, and a line in `docs/HANDOFF-log.md`.
    (segment, direction) graph; curb assignment from stop point to edge.
 2. **Baseline and scoring.** Driven-path reconstruction of an uploaded order;
    scorecard measures; CLI `starboard score stops.csv`.
-3. **Solver v1.** Required-arc model, OR-Tools on the line graph, hard
-   constraints as property tests, local search, CLI `starboard optimize`.
+3. **Solver v1.** Required-arc model, OR-Tools on the line graph, yard and
+   disposal site with capacity, hard constraints as property tests, local
+   search, CLI `starboard optimize`. Then multiple routes, as
+   `docs/adr/0003-multi-route.md` describes: street units, a partition into N
+   contiguous districts, each district solved by the single-route solver, an
+   exchange loop between neighbouring districts, the balanced-total objective
+   (with longest-route and total as options), invariant 5 and an independent
+   route-set checker, a scale benchmark, and
+   `starboard optimize --trucks N`. With N = 1 only the single-route solver
+   runs.
 4. **API and worker.** Orgs, users, routes, uploads, runs, results; arq job;
    Compose stack; schemathesis against the OpenAPI spec.
 5. **Web v1.** Sign-in, route setup, upload with column mapping, review queue
@@ -280,6 +293,14 @@ Record each as an ADR in `docs/adr/` when decided.
 3. Company formation, business bank account, and Stripe account need a legal
    entity. Do this before §5 "Money".
 4. Domain purchase and a trademark clearance search on "Starboard Routing" before launch.
+5. Multiple routes (ADR-0003). Decided: the objective is least total route
+   time with every route within a balance margin of the average. Still open,
+   with the default used until decided: the balance margin (10%); whether a
+   truck profile's maximum route duration bounds every route (yes); the
+   multi-route time budget (three minutes per route); "best found" with a
+   bound and gap in place of "optimal" (yes); one truck profile for all
+   trucks (yes); turning around inside the yard and disposal site is free and
+   is not a street U-turn (yes).
 
 ---
 
