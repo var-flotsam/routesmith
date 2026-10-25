@@ -293,14 +293,12 @@ Record each as an ADR in `docs/adr/` when decided.
 3. Company formation, business bank account, and Stripe account need a legal
    entity. Do this before §5 "Money".
 4. Domain purchase and a trademark clearance search on "Starboard Routing" before launch.
-5. Multiple routes (ADR-0003). Decided: the objective is least total route
-   time with every route within a balance margin of the average. Still open,
-   with the default used until decided: the balance margin (10%); whether a
-   truck profile's maximum route duration bounds every route (yes); the
-   multi-route time budget (three minutes per route); "best found" with a
-   bound and gap in place of "optimal" (yes); one truck profile for all
-   trucks (yes); turning around inside the yard and disposal site is free and
-   is not a street U-turn (yes).
+5. Multiple routes (ADR-0003): decided 2026-10-25. The objective is least
+   total route time with every route within 10% of the average; a truck
+   profile's maximum route duration bounds every route; the time budget is
+   three minutes per route; results say "best found" with a bound and gap;
+   all trucks share one truck profile; turning around inside the yard and
+   disposal site is free and is not a street U-turn.
 
 ---
 
