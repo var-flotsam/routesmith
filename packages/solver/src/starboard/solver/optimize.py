@@ -490,12 +490,19 @@ class _Sequence:
 
 
 def _improving_move(costs: _Costs, plan: Plan, capacity: int | None) -> Plan | None:
-    """The first 2-opt or or-opt move whose best-unload plan beats `plan`, if any."""
+    """The first 2-opt or or-opt move whose best-unload plan beats `plan`, if any.
+
+    With a capacity, a move that looks worse before unloads are placed can be better
+    after; on short orders every move is priced with its unloads, so the search
+    ends at a true local optimum there too.
+    """
     order = _Sequence(costs, list(plan.sequence))
     n = len(order.passes)
+    exact = capacity is None or n <= defaults.EXACT_MOVE_PRICING_MAX_PASSES.value
+    floor = 0 if capacity is None or not exact else -_INFEASIBLE_MS
     for i in range(n):
         for j in range(i + 1, n):
-            if order.two_opt_gain(i, j) > 0:
+            if order.two_opt_gain(i, j) > floor:
                 candidate = order.passes[:i] + order.passes[i : j + 1][::-1] + order.passes[j + 1 :]
                 trial = costs.best_unloads(candidate, capacity)
                 if trial.cost_ms < plan.cost_ms:
@@ -504,7 +511,7 @@ def _improving_move(costs: _Costs, plan: Plan, capacity: int | None) -> Plan | N
             if i + length > n:
                 break
             for gap in range(n + 1):
-                if i <= gap <= i + length or order.or_opt_gain(i, length, gap) <= 0:
+                if i <= gap <= i + length or order.or_opt_gain(i, length, gap) <= floor:
                     continue
                 block = order.passes[i : i + length]
                 rest = order.passes[:i] + order.passes[i + length :]
@@ -520,7 +527,8 @@ def _improve(costs: _Costs, plan: Plan, capacity: int | None) -> Plan:
 
     Moves are priced in O(1) on `pair_ms`, which is exact with no capacity limit;
     each improving candidate is then priced with its best unloads and kept only if
-    that total is lower.
+    that total is lower. With a capacity, orders of up to
+    `defaults.EXACT_MOVE_PRICING_MAX_PASSES` passes price every move with its unloads.
     """
     for _ in range(round(defaults.LOCAL_SEARCH_MAX_ROUNDS.value)):
         better = _improving_move(costs, plan, capacity)
