@@ -52,3 +52,21 @@ def test_the_demo_file_reads_cleanly():
     stop_file = read_stop_file(demo)
     assert len(stop_file.stops) == 754
     assert stop_file.rejected == ()
+
+
+def test_a_route_id_column_names_each_stops_route(tmp_path):
+    path = write(
+        tmp_path,
+        "stop_id,route_id,current_sequence,lon,lat\n"
+        "a,R1,1,-73.0,41.0\n"
+        "b,R2,1,-73.0,41.0\n"
+        "c,,2,-73.0,41.0\n",
+    )
+    stop_file = read_stop_file(path)
+    assert stop_file.route_of == {"a": "R1", "b": "R2"}
+    assert [r.reason for r in stop_file.rejected] == ["no route_id"]
+
+
+def test_without_a_route_id_column_no_routes_are_named(tmp_path):
+    path = write(tmp_path, "stop_id,current_sequence,lon,lat\na,1,-73.0,41.0\n")
+    assert read_stop_file(path).route_of == {}

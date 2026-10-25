@@ -1,6 +1,7 @@
 """The measures shown for a route, computed once from a driven route."""
 
-from dataclasses import dataclass
+from collections.abc import Sequence
+from dataclasses import dataclass, fields
 
 from starboard.solver import defaults
 from starboard.solver.costs import drive_seconds, is_left_turn, is_right_turn, turn_seconds
@@ -69,3 +70,9 @@ def score(graph: StateGraph, route: DrivenRoute) -> Scorecard:
         stops_unreachable=len(route.unreachable_stop_ids),
         disposal_visits=disposal_visits,
     )
+
+
+def area_scorecard(cards: Sequence[Scorecard]) -> Scorecard:
+    """The measures for several routes in one area: every measure summed over the routes."""
+    totals = {f.name: sum(getattr(card, f.name) for card in cards) for f in fields(Scorecard)}
+    return Scorecard(**totals)

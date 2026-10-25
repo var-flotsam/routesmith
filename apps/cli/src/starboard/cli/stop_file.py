@@ -2,13 +2,15 @@
 
 Required columns: `stop_id`, `current_sequence`, `lon`, `lat`. Optional:
 `street`, which breaks ties when a stop is about equally close to two
-streets. A row that cannot be read becomes a rejected row with a reason;
-reading never raises on the file's contents.
+streets, and `route_id`, which names the truck route a stop is on today when
+the area is served by several trucks; `current_sequence` then orders stops
+within their route. A row that cannot be read becomes a rejected row with a
+reason; reading never raises on the file's contents.
 """
 
 import csv
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from starboard.geo.snapping import StopPoint
@@ -25,8 +27,11 @@ class RejectedRow:
 
 @dataclass(frozen=True, slots=True)
 class StopFile:
+    """The stops in current order; `route_of` maps stop ids to route ids when the file has them."""
+
     stops: tuple[StopPoint, ...]
     rejected: tuple[RejectedRow, ...]
+    route_of: dict[str, str] = field(default_factory=dict)
 
 
 def _parse_row(row: dict[str, str]) -> tuple[int, StopPoint] | str:
@@ -50,8 +55,10 @@ def read_stop_file(path: Path) -> StopFile:
         missing = [c for c in REQUIRED_COLUMNS if c not in (reader.fieldnames or [])]
         if missing:
             return StopFile((), (RejectedRow(1, f"missing columns: {', '.join(missing)}"),))
+        with_routes = "route_id" in (reader.fieldnames or [])
         ordered: list[tuple[int, int, StopPoint]] = []
         rejected: list[RejectedRow] = []
+        route_of: dict[str, str] = {}
         seen: set[str] = set()
         for line_number, row in enumerate(reader, start=2):
             parsed = _parse_row(row)
@@ -62,7 +69,13 @@ def read_stop_file(path: Path) -> StopFile:
             if stop.stop_id in seen:
                 rejected.append(RejectedRow(line_number, f"duplicate stop_id {stop.stop_id}"))
                 continue
+            route_id = (row.get("route_id") or "").strip()
+            if with_routes and not route_id:
+                rejected.append(RejectedRow(line_number, "no route_id"))
+                continue
             seen.add(stop.stop_id)
+            if route_id:
+                route_of[stop.stop_id] = route_id
             ordered.append((sequence, line_number, stop))
     ordered.sort(key=lambda item: item[:2])
-    return StopFile(tuple(stop for _, _, stop in ordered), tuple(rejected))
+    return StopFile(tuple(stop for _, _, stop in ordered), tuple(rejected), route_of)
