@@ -21,20 +21,19 @@ the same route.
 import itertools
 from collections import defaultdict
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2, routing_parameters_pb2
 
 from starboard.solver import defaults
-from starboard.solver.connections import UNREACHABLE, ConnectionCosts, traversal_ms
+from starboard.solver.connections import UNREACHABLE, ConnectionCosts, Step, traversal_ms
 from starboard.solver.graph import (
     Direction,
     Pass,
     Place,
     SnappedStop,
     StateGraph,
-    Transition,
 )
 from starboard.solver.route import (
     DrivenRoute,
@@ -50,6 +49,8 @@ from starboard.solver.rules import RoutingRules, u_turn_nodes
 _MS_PER_S = 1000
 # An arc the truck cannot drive costs this; no accepted plan uses one.
 _NO_ARC_MS = 10**9
+# The cost of an order no unloading plan can make legal; it is never accepted.
+_INFEASIBLE_MS = 10**15
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +66,12 @@ class SolveSettings:
 
 
 class UnservedReason(StrEnum):
+    """Why a stop cannot be served.
+
+    UNREACHABLE_FROM_DISPOSAL: the pass cannot be reached after unloading, so it
+    must be served in the first load, and the first load is already full.
+    """
+
     NO_LEGAL_PASS = "no_legal_pass"
     UNREACHABLE_FROM_YARD = "unreachable_from_yard"
     UNREACHABLE_FROM_DISPOSAL = "unreachable_from_disposal"
@@ -98,6 +105,8 @@ class OptimizedRoute:
 
     `time_limited` is true when the wall-clock ceiling, not the solution limit,
     stopped the search; such a route may differ on a faster or slower machine.
+    `start_cost_ms` is the cost of the plan the search started from, the current
+    order; the optimized plan never costs more.
     """
 
     route: DrivenRoute
@@ -106,6 +115,7 @@ class OptimizedRoute:
     over_duration_s: float = 0.0
     solutions_searched: int = 0
     time_limited: bool = False
+    start_cost_ms: int = 0
 
 
 def _position(graph: StateGraph, on_pass: Pass, stop: SnappedStop) -> float:
@@ -128,6 +138,8 @@ class _Costs:
     `pair_ms[(a, b)]` is the cheaper of driving straight from `a` to `b` and
     going by way of the disposal site; with no capacity limit that choice is
     the whole decision about mid-route unloads, so it prices moves exactly.
+    `first_load_only` are passes the truck cannot reach after unloading; every
+    unload comes after the last of them.
     """
 
     def __init__(
@@ -153,6 +165,9 @@ class _Costs:
         self.pair_ms = {
             (a, b): min(link, self.via_disposal(a, b)) for (a, b), link in self.link_ms.items()
         }
+        self.first_load_only = frozenset(
+            p for p in passes if self.from_disposal_ms[p] == _NO_ARC_MS
+        )
 
     def via_disposal(self, a: Pass, b: Pass) -> int:
         return self.to_disposal_ms[a] + self.unload_ms + self.from_disposal_ms[b]
@@ -171,22 +186,37 @@ class _Costs:
         return cost + self.close(sequence[-1])
 
     def best_unloads(self, sequence: Sequence[Pass], capacity: int | None) -> Plan:
-        """The cheapest places to unload for this order, keeping every load within capacity."""
+        """The cheapest places to unload for this order, keeping every load within capacity.
+
+        An order that no unloading plan makes legal costs `_INFEASIBLE_MS`.
+        """
         if not sequence:
             return Plan((), (), 0)
+        # An unload after sequence[k] needs every first-load-only pass at or before k.
+        last_first_only = max(
+            (k for k, p in enumerate(sequence) if p in self.first_load_only), default=0
+        )
         if capacity is None:
             unloads = [
                 k
-                for k in range(len(sequence) - 1)
+                for k in range(last_first_only, len(sequence) - 1)
                 if self.via_disposal(sequence[k], sequence[k + 1])
                 < self.link_ms[(sequence[k], sequence[k + 1])]
             ]
         else:
-            unloads = self._split(sequence, capacity)
-        return Plan(tuple(sequence), tuple(unloads), self.plan_cost(sequence, unloads))
+            split = self._split(sequence, capacity)
+            if split is None:
+                return Plan(tuple(sequence), (), _INFEASIBLE_MS)
+            unloads = split
+        cost = self.plan_cost(sequence, unloads)
+        return Plan(tuple(sequence), tuple(unloads), min(cost, _INFEASIBLE_MS))
 
-    def _split(self, sequence: Sequence[Pass], capacity: int) -> list[int]:
-        """Unload points by dynamic programming over loads of consecutive passes."""
+    def _split(self, sequence: Sequence[Pass], capacity: int) -> list[int] | None:
+        """Unload points by dynamic programming over loads of consecutive passes.
+
+        Loads after the first may not hold a first-load-only pass. None when no
+        split keeps every load within capacity.
+        """
         n = len(sequence)
         prefix = [0]
         for k in range(n - 1):
@@ -203,7 +233,7 @@ class _Costs:
             load = 0
             for j in range(i, n):
                 load += self.carts[sequence[j]]
-                if load > capacity:
+                if load > capacity or (i > 0 and sequence[j] in self.first_load_only):
                     break
                 within = cheapest[i] + prefix[j] - prefix[i]
                 if j == n - 1:
@@ -214,7 +244,7 @@ class _Costs:
                     if candidate < cheapest[j + 1]:
                         cheapest[j + 1], came_from[j + 1] = candidate, i
         if last_start < 0:
-            raise ValueError("a single pass holds more carts than the truck")
+            return None
         unloads: list[int] = []
         start = last_start
         while start > 0:
@@ -324,6 +354,21 @@ def _add_load(
             load.SlackVar(manager.NodeToIndex(node)).SetValue(0)
 
 
+def _add_first_load(
+    routing: pywrapcp.RoutingModel,
+    manager: pywrapcp.RoutingIndexManager,
+    model: _LineGraphModel,
+) -> None:
+    """Count disposal visits along the route; first-load-only passes come before any."""
+    visits = [1 if model.is_visit(node) else 0 for node in range(model.size)]
+    trips = routing.RegisterUnaryTransitVector(visits)
+    routing.AddDimension(trips, 0, model.size, True, "trips")
+    dimension = routing.GetDimensionOrDie("trips")
+    for k, p in enumerate(model.passes):
+        if p in model.costs.first_load_only:
+            dimension.CumulVar(manager.NodeToIndex(model.first_pass + k)).SetMax(0)
+
+
 def _warm_nodes(model: _LineGraphModel, plan: Plan) -> list[int]:
     """The warm-start route as model nodes, with a disposal visit after each unload."""
     index_of = {p: model.first_pass + k for k, p in enumerate(model.passes)}
@@ -336,50 +381,51 @@ def _warm_nodes(model: _LineGraphModel, plan: Plan) -> list[int]:
     return nodes
 
 
+def _feasible_start(costs: _Costs, warm_order: list[Pass], capacity: int | None) -> Plan:
+    """A legal plan from the warm order: first-load-only passes moved first if needed."""
+    plan = costs.best_unloads(warm_order, capacity)
+    if plan.cost_ms < _INFEASIBLE_MS:
+        return plan
+    first = [p for p in warm_order if p in costs.first_load_only]
+    rest = [p for p in warm_order if p not in costs.first_load_only]
+    return costs.best_unloads(first + rest, capacity)
+
+
 def _solve_order(
     costs: _Costs,
     passes: list[Pass],
-    warm_order: list[Pass],
-    profile: TruckProfile,
+    warm_plan: Plan,
+    capacity: int | None,
     solution_limit: int,
 ) -> tuple[list[Pass], int, bool]:
     """An order of `passes` from OR-Tools routing, how many solutions it searched, and
-    whether the wall-clock ceiling stopped it (then the route can vary by machine)."""
-    capacity = profile.capacity_carts
-    warm_plan = costs.best_unloads(warm_order, capacity) if warm_order else None
-    needed = 0 if capacity is None else max(0, -(-sum(costs.carts.values()) // capacity) - 1)
-    if warm_plan is not None:
-        needed = max(needed, len(warm_plan.unload_after))
-    model = _LineGraphModel(costs, passes, needed + round(defaults.SPARE_DISPOSAL_VISITS.value))
-    matrix = model.matrix()
+    whether the wall-clock ceiling stopped it (then the route can vary by machine).
 
+    `warm_plan` is a legal plan holding every pass. The model gets as many
+    disposal visits as it uses, plus spares, so it always has a feasible solution.
+    """
+    spare = round(defaults.SPARE_DISPOSAL_VISITS.value)
+    visits = min(len(warm_plan.unload_after) + spare, max(len(passes) - 1, 0))
+    model = _LineGraphModel(costs, passes, visits)
     manager = pywrapcp.RoutingIndexManager(model.size, 1, [0], [model.end])
     routing = pywrapcp.RoutingModel(manager)
-    transit = routing.RegisterTransitMatrix(matrix)
+    transit = routing.RegisterTransitMatrix(model.matrix())
     routing.SetArcCostEvaluatorOfAllVehicles(transit)
     for node in range(model.first_visit, model.end):
         routing.AddDisjunction([manager.NodeToIndex(node)], 0)
     if capacity is not None:
         _add_load(routing, manager, model, capacity)
-    if profile.max_route_duration_s is not None:
-        routing.AddDimension(transit, 0, sum(max(row) for row in matrix), True, "time")
-        routing.GetDimensionOrDie("time").SetCumulVarSoftUpperBound(
-            routing.End(0),
-            round(profile.max_route_duration_s * _MS_PER_S),
-            round(defaults.DURATION_EXCESS_COST.value),
-        )
+    if costs.first_load_only:
+        _add_first_load(routing, manager, model)
 
     params = _search_parameters(solution_limit)
+    routing.CloseModelWithParameters(params)
+    initial = routing.ReadAssignmentFromRoutes([_warm_nodes(model, warm_plan)], True)
     solution = None
-    if warm_plan is not None:
-        routing.CloseModelWithParameters(params)
-        initial = routing.ReadAssignmentFromRoutes([_warm_nodes(model, warm_plan)], True)
-        if initial is not None:
-            solution = routing.SolveFromAssignmentWithParameters(initial, params)
+    if initial is not None:
+        solution = routing.SolveFromAssignmentWithParameters(initial, params)
     if solution is None:
-        solution = routing.SolveWithParameters(params)
-    if solution is None:
-        return list(warm_order or passes), 0, False
+        return list(warm_plan.sequence), 0, False
 
     order: list[Pass] = []
     index = routing.Start(0)
@@ -505,18 +551,18 @@ class _Expansion:
         length = self.graph.segments[p.segment_id].length_m
         self.traversals.append(Traversal(p, 0.0, length, tuple(s.stop_id for s in served)))
 
-    def follow(self, transitions: Sequence[Transition], collect_last: bool) -> None:
-        for k, t in enumerate(transitions):
-            self.joins.append(t)
-            self.drive(t.to_pass, collect_last and k == len(transitions) - 1)
+    def follow(self, steps: Sequence[Step], collect_last: bool) -> None:
+        for k, (join, next_pass) in enumerate(steps):
+            self.joins.append(join)
+            self.drive(next_pass, collect_last and k == len(steps) - 1)
 
     def leave(self, place: Place, target: Pass) -> None:
-        first, transitions = self.connections.path_from_place(place, target)
-        if not transitions:
+        first, steps = self.connections.path_from_place(place, target)
+        if not steps:
             self.drive(target, True)
             return
         self.drive(first, False)
-        self.follow(transitions, True)
+        self.follow(steps, True)
 
     def route(self, sites: RouteSites, plan: Plan, allowed_u_turns: frozenset[int]) -> DrivenRoute:
         yard, disposal = sites.yard, sites.disposal
@@ -538,10 +584,10 @@ class _Expansion:
             closing = (PlaceVisit(disposal, unload=True),)
         else:
             self.joins.append(PlaceVisit(disposal, unload=True))
-            first, transitions = self.connections.path_between_places(disposal, yard)
+            first, steps = self.connections.path_between_places(disposal, yard)
             if first is not None:
                 self.drive(first, False)
-                self.follow(transitions, False)
+                self.follow(steps, False)
         return DrivenRoute(
             tuple(self.traversals),
             tuple(self.joins),
@@ -561,11 +607,29 @@ def _unservable(
         return UnservedReason.UNREACHABLE_FROM_YARD
     if connections.to_place(p, sites.disposal) == UNREACHABLE:
         return UnservedReason.CANNOT_REACH_DISPOSAL
-    if connections.from_place(sites.disposal, p) == UNREACHABLE:
-        return UnservedReason.UNREACHABLE_FROM_DISPOSAL
     if profile.capacity_carts is not None and carts > profile.capacity_carts:
         return UnservedReason.OVER_CAPACITY
     return None
+
+
+def _overflowing_first_load(
+    connections: ConnectionCosts,
+    sites: RouteSites,
+    stops_on: dict[Pass, list[SnappedStop]],
+    capacity: int | None,
+) -> list[Pass]:
+    """First-load-only passes that do not fit in the first load, in pass order."""
+    if capacity is None:
+        return []
+    load, overflow = 0, []
+    for p in sorted(stops_on, key=_pass_key):
+        if connections.from_place(sites.disposal, p) != UNREACHABLE:
+            continue
+        if load + len(stops_on[p]) > capacity:
+            overflow.append(p)
+        else:
+            load += len(stops_on[p])
+    return overflow
 
 
 def optimize(
@@ -594,26 +658,28 @@ def optimize(
         reason = _unservable(connections, sites, profile, p, len(stops_on[p]))
         if reason is not None:
             unserved.extend(UnservedStop(s.stop_id, reason) for s in stops_on.pop(p))
+    for p in _overflowing_first_load(connections, sites, stops_on, profile.capacity_carts):
+        reason = UnservedReason.UNREACHABLE_FROM_DISPOSAL
+        unserved.extend(UnservedStop(s.stop_id, reason) for s in stops_on.pop(p))
 
     passes = sorted(stops_on, key=_pass_key)
     costs = _Costs(graph, connections, sites, {p: len(stops_on[p]) for p in passes})
-    warm_order = list(
-        dict.fromkeys(
-            s.required_pass
-            for s in (warm_start if warm_start is not None else stops)
-            if s.required_pass in stops_on
-        )
-    )
+    listed = warm_start if warm_start is not None else stops
+    warm_order = list(dict.fromkeys(s.required_pass for s in listed if s.required_pass in stops_on))
+    in_order = set(warm_order)
+    warm_order += [p for p in passes if p not in in_order]  # every pass is in the order
+    capacity = profile.capacity_carts
+    start = _feasible_start(costs, warm_order, capacity)
     limit = settings.solution_limit or round(defaults.SOLVER_SOLUTION_LIMIT.value)
     order, searched, timed_out = (
-        _solve_order(costs, passes, warm_order, profile, limit) if passes else ([], 0, False)
+        _solve_order(costs, passes, start, capacity, limit) if passes else ([], 0, False)
     )
-    plan = _improve(
-        costs, costs.best_unloads(order, profile.capacity_carts), profile.capacity_carts
-    )
+    solved = costs.best_unloads(order, capacity)
+    plan = _improve(costs, solved if solved.cost_ms <= start.cost_ms else start, capacity)
     route = _Expansion(graph, connections, stops_on).route(sites, plan, allowed_u_turns)
+    route = replace(route, unreachable_stop_ids=tuple(u.stop_id for u in unserved))
 
     over = 0.0
     if profile.max_route_duration_s is not None:
         over = max(0.0, plan.cost_ms / _MS_PER_S - profile.max_route_duration_s)
-    return OptimizedRoute(route, plan, tuple(unserved), over, searched, timed_out)
+    return OptimizedRoute(route, plan, tuple(unserved), over, searched, timed_out, start.cost_ms)

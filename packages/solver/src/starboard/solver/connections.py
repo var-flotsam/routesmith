@@ -6,7 +6,9 @@ against a one-way, never through a restricted turn, and U-turning only at
 the nodes the routing rules allow. Places (the yard, a disposal site) are
 network nodes; leaving a place means starting any pass that begins there,
 and reaching a place means finishing any pass that ends there. Turning
-around inside a place is free and is not a street U-turn.
+around inside a place is free and is not a street U-turn, so a connection
+may go in and out of the yard or a disposal site to turn round; such a
+pass-through is a visit with no unloading.
 
 Costs are integer milliseconds, so comparisons are exact and repeatable.
 Shortest paths come from SciPy's Dijkstra over the pass graph
@@ -22,12 +24,16 @@ from scipy.sparse.csgraph import dijkstra
 
 from starboard.solver.costs import drive_seconds, turn_seconds
 from starboard.solver.graph import Direction, Pass, Place, StateGraph, Transition
+from starboard.solver.route import Join, PlaceVisit
 
 _MS_PER_S = 1000
 # Every edge weighs at least this, because the shortest-path routine does not
 # distinguish a zero-weight edge from a missing one.
 _MIN_EDGE_MS = 1
 UNREACHABLE = -1
+
+# One step of a connection: how the truck gets onto the next pass, and that pass.
+Step = tuple[Join, Pass]
 
 
 def allowed_transitions(graph: StateGraph, u_turn_nodes: frozenset[int]) -> list[Transition]:
@@ -73,6 +79,7 @@ class ConnectionCosts:
         count = len(self._passes)
         self._leave = {place: count + 2 * k for k, place in enumerate(self._places)}
         self._reach = {place: count + 2 * k + 1 for k, place in enumerate(self._places)}
+        self._place_at = {v: place for place, v in self._reach.items()}
         size = count + 2 * len(self._places)
         self._traversal = np.array([traversal_ms(graph, p) for p in self._passes], dtype=np.int64)
 
@@ -109,6 +116,10 @@ class ConnectionCosts:
                 rows.append(i)
                 cols.append(self._reach[place])
                 weights.append(_MIN_EDGE_MS)
+            # Turning round inside the place: in, then straight out again.
+            rows.append(self._reach[place])
+            cols.append(self._leave[place])
+            weights.append(_MIN_EDGE_MS)
         matrix = csr_array(
             (np.array(weights, dtype=np.float64), (np.array(rows), np.array(cols))),
             shape=(size, size),
@@ -170,34 +181,42 @@ class ConnectionCosts:
             vertices.append(previous)
         return list(reversed(vertices))
 
-    def _passes_on(self, vertices: Sequence[int]) -> list[Pass]:
-        return [self._passes[v] for v in vertices if v < len(self._passes)]
-
-    def path_between(self, a: Pass, b: Pass) -> tuple[Transition, ...]:
-        """The transitions from the end of `a` to the start of `b`."""
+    def path_between(self, a: Pass, b: Pass) -> tuple[Step, ...]:
+        """The steps from the end of `a` to the start of `b`, ending with `b`."""
         if a == b:
-            raise ValueError("a connection from a pass to itself has no unique path here")
-        vertices = self._walk(self._index[a], self._index[b])
-        return self._transitions_along(vertices)
+            raise ValueError("a connection joins two different passes")
+        return self._steps(self._walk(self._index[a], self._index[b]))
 
-    def path_from_place(self, place: Place, b: Pass) -> tuple[Pass, tuple[Transition, ...]]:
-        """The first pass driven after leaving `place`, and the transitions to `b`."""
+    def path_from_place(self, place: Place, b: Pass) -> tuple[Pass, tuple[Step, ...]]:
+        """The first pass driven after leaving `place`, and the steps from it to `b`."""
         vertices = self._walk(self._leave[place], self._index[b])[1:]
-        return self._passes[vertices[0]], self._transitions_along(vertices)
+        return self._passes[vertices[0]], self._steps(vertices)
 
-    def path_to_place(self, a: Pass, place: Place) -> tuple[Transition, ...]:
-        """The transitions from the end of `a` until a pass ending at `place` is driven."""
-        vertices = self._walk(self._index[a], self._reach[place])[:-1]
-        return self._transitions_along(vertices)
+    def path_to_place(self, a: Pass, place: Place) -> tuple[Step, ...]:
+        """The steps from the end of `a` until a pass ending at `place` is driven."""
+        return self._steps(self._walk(self._index[a], self._reach[place])[:-1])
 
-    def path_between_places(
-        self, start: Place, end: Place
-    ) -> tuple[Pass | None, tuple[Transition, ...]]:
-        """The first pass and the transitions from leaving `start` to reaching `end`."""
+    def path_between_places(self, start: Place, end: Place) -> tuple[Pass | None, tuple[Step, ...]]:
+        """The first pass and the steps from leaving `start` to reaching `end`."""
         if start.node == end.node:
             return None, ()
         vertices = self._walk(self._leave[start], self._reach[end])[1:-1]
-        return self._passes[vertices[0]], self._transitions_along(vertices)
+        return self._passes[vertices[0]], self._steps(vertices)
 
-    def _transitions_along(self, vertices: Sequence[int]) -> tuple[Transition, ...]:
-        return tuple(self._transition[pair] for pair in itertools.pairwise(vertices))
+    def _steps(self, vertices: Sequence[int]) -> tuple[Step, ...]:
+        """Steps along a walk that starts on a pass: a turn, or a pass-through visit."""
+        count = len(self._passes)
+        steps: list[Step] = []
+        visit: PlaceVisit | None = None
+        for i, j in itertools.pairwise(vertices):
+            if j >= count:
+                if j in self._place_at:
+                    visit = PlaceVisit(self._place_at[j], unload=False)
+                continue
+            if i >= count:
+                assert visit is not None
+                steps.append((visit, self._passes[j]))
+                visit = None
+            else:
+                steps.append((self._transition[(i, j)], self._passes[j]))
+        return tuple(steps)

@@ -224,12 +224,13 @@ DISPOSAL_UNLOAD_TIME = Tunable(
 )
 
 SOLVER_SOLUTION_LIMIT = Tunable(
-    value=2000.0,
+    value=1000.0,
     unit="solutions",
     reason=(
-        "OR-Tools stops after this many solutions, so the same input always gives the same "
-        "route on any machine (a wall-clock limit would not). Set from the benchmark so a "
-        "1,200-stop route finishes well inside three minutes."
+        "OR-Tools stops after this many solutions, so the same input gives the same route on "
+        "any machine. On a 1,200-stop, 450-pass synthetic route (seed 7) 1,000 solutions took "
+        "46 s in all and came within 0.5% of 2,000, which hit the three-minute ceiling; fewer "
+        "solutions left more to local search and took longer."
     ),
 )
 
@@ -256,17 +257,6 @@ SPARE_DISPOSAL_VISITS = Tunable(
         "Optional disposal visits offered to OR-Tools beyond the fewest the carts need, so an "
         "order whose loads pack less tightly still has a place to unload."
     ),
-)
-
-DURATION_EXCESS_COST = Tunable(
-    value=100.0,
-    unit="ms of cost per ms over",
-    reason=(
-        "Weight on time beyond the truck's maximum route duration, large enough to dominate "
-        "drive time so the search keeps routes within the limit when it can; the OR-Tools VRP "
-        "guide uses 100 for its span weight."
-    ),
-    source="https://developers.google.com/optimization/routing/vrp",
 )
 
 

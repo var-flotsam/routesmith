@@ -134,6 +134,10 @@ class _Router:
                     frontier.append(before)
         self._usable = frozenset(reach)
 
+    def use_all_passes(self) -> None:
+        """Lift `keep_within_reach_of`, for the drive back from the disposal site."""
+        self._usable = self._passes
+
     def ends(self, on_pass: Pass) -> tuple[int, int]:
         segment = self._graph.segments[on_pass.segment_id]
         if on_pass.direction is Direction.FORWARD:
@@ -423,6 +427,7 @@ def _finish(drive: _Drive, sites: RouteSites) -> tuple[PlaceVisit, ...]:
     reached = drive.visit(PlaceVisit(sites.disposal, unload=True))
     assert reached, "the truck only drives passes that can reach the disposal site"
     if sites.disposal.node != sites.yard.node:
+        drive.router.use_all_passes()
         if not drive.visit(PlaceVisit(sites.yard, unload=False)):
             raise ValueError("the yard cannot be reached from the disposal site")
         drive.pending.pop()  # arriving at the yard ends the route; it is not a visit

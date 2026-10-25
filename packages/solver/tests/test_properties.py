@@ -29,7 +29,7 @@ from starboard.solver.graph import (
     StateGraph,
     StreetSegment,
 )
-from starboard.solver.optimize import SolveSettings, optimize
+from starboard.solver.optimize import SolveSettings, UnservedReason, optimize
 from starboard.solver.route import DrivenRoute, PlaceVisit, RouteSites, TruckProfile
 from starboard.solver.rules import RoutingRules, UTurnPolicy
 from starboard.solver.scorecard import score
@@ -389,9 +389,45 @@ def routing_problems(draw: st.DrawFn) -> tuple[Scenario, RouteSites, TruckProfil
     scenario = draw(scenarios())
     nodes = sorted({n for s in scenario.graph.segments.values() for n in (s.from_node, s.to_node)})
     yard = Place("yard", draw(st.sampled_from(nodes)))
-    disposal = Place("disposal", draw(st.sampled_from(nodes)))
+    # Mostly a separate disposal site, so the drive between them is exercised.
+    others = [n for n in nodes if n != yard.node]
+    disposal_node = draw(st.sampled_from(others) | st.just(yard.node)) if others else yard.node
+    disposal = Place("disposal", disposal_node)
     capacity = draw(st.none() | st.integers(1, 8))
     return scenario, RouteSites(yard, disposal), TruckProfile(capacity_carts=capacity)
+
+
+def _walk_exists(scenario: Scenario, sites: RouteSites, start: int | Pass, end: int | Pass) -> bool:
+    """Worked out from scratch: a legal drive from `start` to `end`, where each is a node
+    (leave or reach it) or a pass (from its end, or to its start), turning round freely
+    inside the yard or the disposal site."""
+    graph = scenario.graph
+    places = {sites.yard.node, sites.disposal.node}
+    out = defaultdict(list)
+    for t in graph.transitions:
+        if t.forbidden_by_restriction or (t.is_u_turn and not allowed_u_turn(scenario, t.via_node)):
+            continue
+        out[t.from_pass].append(t.to_pass)
+    starting_at = defaultdict(list)
+    for p in graph.passes:
+        starting_at[_pass_ends(graph, p)[0]].append(p)
+    for p in graph.passes:
+        node = _pass_ends(graph, p)[1]
+        if node in places:
+            out[p].extend(starting_at[node])
+    frontier = list(starting_at[start]) if isinstance(start, int) else list(out[start])
+    seen = set(frontier)
+    while frontier:
+        current = frontier.pop()
+        if isinstance(end, int) and _pass_ends(graph, current)[1] == end:
+            return True
+        if current == end:
+            return True
+        for nxt in out[current]:
+            if nxt not in seen:
+                seen.add(nxt)
+                frontier.append(nxt)
+    return isinstance(start, Pass) and isinstance(end, int) and _pass_ends(graph, start)[1] == end
 
 
 def _settings(scenario: Scenario, profile: TruckProfile) -> SolveSettings:
@@ -439,11 +475,31 @@ def test_every_optimized_route_meets_the_hard_constraints(problem):
     passes = set(graph.passes)
     transitions = set(graph.transitions)
 
-    # Every servable stop is collected exactly once.
+    # Every servable stop is collected exactly once; every other one has a true reason.
     picked = [p.stop_id for p in route.pickups]
     assert len(picked) == len(set(picked))
     assert set(picked) | unserved == set(by_id)
     assert not set(picked) & unserved
+    assert set(route.unreachable_stop_ids) == unserved
+    carts_on = defaultdict(int)
+    for stop in stops:
+        carts_on[stop.required_pass] += 1
+    capacity = profile.capacity_carts
+    for item in result.unserved:
+        p = by_id[item.stop_id].required_pass
+        if item.reason is UnservedReason.NO_LEGAL_PASS:
+            assert p not in passes
+        elif item.reason is UnservedReason.UNREACHABLE_FROM_YARD:
+            assert not _walk_exists(scenario, sites, sites.yard.node, p)
+        elif item.reason is UnservedReason.CANNOT_REACH_DISPOSAL:
+            assert not _walk_exists(scenario, sites, p, sites.disposal.node)
+        elif item.reason is UnservedReason.OVER_CAPACITY:
+            assert capacity is not None and carts_on[p] > capacity
+        else:
+            assert item.reason is UnservedReason.UNREACHABLE_FROM_DISPOSAL
+            assert capacity is not None
+            assert not _walk_exists(scenario, sites, sites.disposal.node, p)
+    assert result.plan.cost_ms <= result.start_cost_ms
 
     # 1. Every serviced cart is on the truck's right at the moment of service.
     for pickup in route.pickups:
@@ -513,3 +569,26 @@ def test_the_same_input_gives_the_same_route(problem):
     scenario, sites, profile = problem
     first, second = (_solve(scenario, sites, profile) for _ in range(2))
     assert first == second
+
+
+@given(routing_problems(), st.data())
+def test_a_partial_current_order_still_serves_every_servable_stop(problem, data):
+    scenario, sites, profile = problem
+    warm = data.draw(
+        st.lists(st.sampled_from(scenario.stops), unique=True) if scenario.stops else st.just([])
+    )
+    try:
+        result = optimize(
+            scenario.graph,
+            scenario.stops,
+            sites,
+            _settings(scenario, profile),
+            warm_start=warm,
+        )
+    except ValueError:
+        assert not _yard_reachable_from_disposal(scenario, sites)
+        return
+    picked = {p.stop_id for p in result.route.pickups}
+    unserved = {u.stop_id for u in result.unserved}
+    assert picked | unserved == {s.stop_id for s in scenario.stops}
+    assert not picked & unserved
