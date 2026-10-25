@@ -101,3 +101,20 @@ class StateGraph:
     transitions: tuple[Transition, ...]
     dead_end_nodes: frozenset[int]
     osm_snapshot: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SnappedStop:
+    """A stop placed on a segment.
+
+    `distance_along_m` is measured from the segment's `from_node`.
+    `side_of_forward` is the curb the stop is on when travelling the segment
+    forward; `required_pass` is the pass that has it on the truck's right.
+    """
+
+    stop_id: str
+    segment_id: str
+    distance_along_m: float
+    distance_from_centerline_m: float
+    side_of_forward: CurbSide
+    required_pass: Pass

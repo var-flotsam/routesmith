@@ -18,7 +18,15 @@ from shapely import LineString, Point, STRtree
 from starboard.geo.projection import LocalProjection
 from starboard.geo.street_names import same_street_name
 from starboard.solver import defaults
-from starboard.solver.graph import CurbSide, Direction, LonLat, Pass, StateGraph, StreetSegment
+from starboard.solver.graph import (
+    CurbSide,
+    Direction,
+    LonLat,
+    Pass,
+    SnappedStop,
+    StateGraph,
+    StreetSegment,
+)
 
 # Half-length of the stretch of line used to read its direction at the snap point.
 _TANGENT_HALF_LENGTH_M = 0.5
@@ -31,22 +39,6 @@ class StopPoint:
     stop_id: str
     location: LonLat
     street: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class SnappedStop:
-    """A stop placed on a segment.
-
-    `side_of_forward` is the curb the stop is on when travelling the segment
-    forward; `required_pass` is the pass that has it on the truck's right.
-    """
-
-    stop_id: str
-    segment_id: str
-    distance_along_m: float
-    distance_from_centerline_m: float
-    side_of_forward: CurbSide
-    required_pass: Pass
 
 
 class ReviewReason(StrEnum):
