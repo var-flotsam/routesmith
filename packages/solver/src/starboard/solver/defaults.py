@@ -47,6 +47,18 @@ CURB_SIDE_MIN_OFFSET = Tunable(
 )
 
 
+# OSM data (packages/geo)
+
+OSM_EXTRACT_MAX_AGE = Tunable(
+    value=30.0,
+    unit="days",
+    reason=(
+        "A downloaded OSM extract older than this is fetched again, so networks follow the "
+        "monthly refresh HANDOFF.md section 2.4 asks for."
+    ),
+)
+
+
 # Drive time and turn costs (packages/solver)
 
 _OSRM_CAR_PROFILE = "https://github.com/Project-OSRM/osrm-backend/blob/master/profiles/car.lua"

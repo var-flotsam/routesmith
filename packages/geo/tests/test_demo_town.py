@@ -1,7 +1,10 @@
 """The geo pipeline on the demo town: Byram, Greenwich, CT.
 
-Needs the OSM network for the demo area, fetched from Overpass on the first
-run and read from `cache/osm/` after that. Run with `pytest -m demo`.
+Needs the OSM network for the demo area. It is built from
+`cache/osm/extracts/connecticut-latest.osm.pbf` when that file is there
+(download it from Geofabrik, see `starboard.geo.extract`), otherwise
+fetched from Overpass, and read from `cache/osm/` after that. Run with
+`pytest -m demo`.
 """
 
 import csv
@@ -22,6 +25,7 @@ pytestmark = pytest.mark.demo
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEMO_STOPS = REPO_ROOT / "data" / "demo" / "stops.csv"
 NETWORK_MARGIN_M = 300.0  # room for the streets that bound the outermost stops
+EXTRACT = REPO_ROOT / "cache" / "osm" / "extracts" / "connecticut-latest.osm.pbf"
 
 
 @pytest.fixture(scope="module")
@@ -40,7 +44,8 @@ def stops() -> list[StopPoint]:
 @pytest.fixture(scope="module")
 def graph(stops):
     bbox = bbox_around((s.location for s in stops), NETWORK_MARGIN_M)
-    return fetch_network(bbox, cache_dir=REPO_ROOT / "cache" / "osm")
+    extract = EXTRACT if EXTRACT.exists() else None
+    return fetch_network(bbox, cache_dir=REPO_ROOT / "cache" / "osm", extract=extract)
 
 
 def test_network_records_its_osm_snapshot(graph):

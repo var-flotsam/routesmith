@@ -10,6 +10,7 @@ dependencies = [
     "osmnx>=2.0",
     "shapely>=2.0",
     "networkx>=3.3",
+    "osmium>=4.0",
 ]
 
 [build-system]
