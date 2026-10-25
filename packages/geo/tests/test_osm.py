@@ -135,3 +135,34 @@ def test_restrictions_are_read_from_overpass_relations():
 def test_segments_keep_their_osm_way_ids():
     segments = {s.segment_id: s for s in segments_from_osmnx(osmnx_like_graph())}
     assert segments["1-2-0"].osm_way_ids == (100,)
+
+
+def test_a_two_way_street_merged_from_ways_listed_in_either_order_is_one_segment():
+    graph = nx.MultiDiGraph(crs="epsg:4326")
+    graph.add_node(1, x=-73.000, y=41.000)
+    graph.add_node(2, x=-72.999, y=41.000)
+    line = LineString([(-73.000, 41.000), (-72.9995, 41.0), (-72.999, 41.000)])
+    common = {"name": "Elm Street", "length": 90.0, "oneway": False}
+    graph.add_edge(1, 2, 0, geometry=line, osmid=[1000000008, 1000000016], **common)
+    graph.add_edge(
+        2, 1, 0, geometry=LineString(line.coords[::-1]), osmid=[1000000016, 1000000008], **common
+    )
+    (segment,) = segments_from_osmnx(graph)
+    assert (segment.forward_allowed, segment.reverse_allowed) == (True, True)
+    assert segment.osm_way_ids == (1000000008, 1000000016)
+
+
+def test_a_street_cut_off_at_the_edge_of_the_area_is_not_a_dead_end(tmp_path, monkeypatch):
+    def fake_fetch(bbox, **kwargs):
+        graph = osmnx_like_graph()
+        graph.add_node(5, x=-72.990, y=41.000)  # outside the box below
+        graph.add_edge(4, 5, 0, osmid=400, name="Long Road", length=600.0, oneway=False)
+        graph.add_edge(5, 4, 0, osmid=400, name="Long Road", length=600.0, oneway=False)
+        return graph
+
+    monkeypatch.setattr(osm.ox, "graph_from_bbox", fake_fetch)
+    monkeypatch.setattr(osm, "_fetch_restriction_relations", lambda bbox: {"elements": []})
+    bbox = BoundingBox(west=-73.001, south=40.999, east=-72.997, north=41.001)
+    network = fetch_network(bbox, cache_dir=tmp_path)
+    assert 1 in network.dead_end_nodes  # the real end of Elm Street, inside the box
+    assert 5 not in network.dead_end_nodes
