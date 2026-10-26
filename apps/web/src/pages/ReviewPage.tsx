@@ -112,7 +112,7 @@ export function ReviewPage() {
               {selected.review_detail && <span className="muted"> ({selected.review_detail})</span>}
             </p>
             {selected.lon !== null && (
-              <Suspense fallback={<div className="map">Loading the map…</div>}>
+              <Suspense fallback={<div className="map">Loading the mapâ€¦</div>}>
                 <ReviewMap stop={selected} chosen={hovered} />
               </Suspense>
             )}
