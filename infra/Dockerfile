@@ -23,6 +23,8 @@ RUN uv sync --frozen --no-dev --all-packages --no-install-workspace
 COPY packages packages
 COPY apps apps
 COPY alembic.ini ./
+# The public demo set, for `python -m starboard.api.demo`.
+COPY data/demo data/demo
 RUN uv sync --frozen --no-dev --all-packages
 
 RUN useradd --create-home starboard && mkdir -p /app/cache && chown starboard /app/cache
