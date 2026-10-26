@@ -1,6 +1,19 @@
 {
   "components": {
     "schemas": {
+      "Action": {
+        "enum": [
+          "depart",
+          "left",
+          "right",
+          "straight",
+          "u_turn",
+          "unload",
+          "arrive"
+        ],
+        "title": "Action",
+        "type": "string"
+      },
       "Body_upload_stops_orgs__org_id__routes__route_id__uploads_post": {
         "properties": {
           "file": {
@@ -347,12 +360,20 @@
           },
           "scorecard": {
             "$ref": "#/components/schemas/ScorecardOut"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/StepOut"
+            },
+            "title": "Steps",
+            "type": "array"
           }
         },
         "required": [
           "scorecard",
           "order",
-          "path"
+          "path",
+          "steps"
         ],
         "title": "OptimizedRoute",
         "type": "object"
@@ -971,6 +992,44 @@
           "report"
         ],
         "title": "SharedRun",
+        "type": "object"
+      },
+      "StepOut": {
+        "description": "One line of a driver's route sheet (`starboard.solver.route_sheet`).",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/Action"
+          },
+          "distance_m": {
+            "title": "Distance M",
+            "type": "number"
+          },
+          "stop_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Stop Ids",
+            "type": "array"
+          },
+          "street": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Street"
+          }
+        },
+        "required": [
+          "action",
+          "street",
+          "distance_m",
+          "stop_ids"
+        ],
+        "title": "StepOut",
         "type": "object"
       },
       "StopOut": {

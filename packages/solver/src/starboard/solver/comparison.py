@@ -18,9 +18,19 @@ from starboard.solver.objectives import RouteObjective
 from starboard.solver.optimize import SolveSettings
 from starboard.solver.paths import driven_path
 from starboard.solver.route import DrivenRoute, RouteSites
+from starboard.solver.route_sheet import Step, route_sheet
 from starboard.solver.scorecard import area_scorecard, score
 
 _MS_PER_S = 1000
+
+
+def _step(step: Step) -> dict[str, Any]:
+    return {
+        "action": step.action.value,
+        "street": step.street,
+        "distance_m": step.distance_m,
+        "stop_ids": list(step.stop_ids),
+    }
 
 
 def _line(graph: StateGraph, route: DrivenRoute) -> list[list[float]]:
@@ -76,6 +86,7 @@ def compare(
                     "scorecard": asdict(card),
                     "order": [p.stop_id for p in r.route.pickups],
                     "path": _line(graph, r.route),
+                    "steps": [_step(step) for step in route_sheet(graph, r.route)],
                 }
                 for r, card in zip(result.routes, optimized_cards, strict=True)
             ],
