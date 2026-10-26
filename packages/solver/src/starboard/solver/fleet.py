@@ -1,7 +1,10 @@
 """Several routes in one area: districts first, then the single-route solver (ADR-0003).
 
 `solve_routes` splits the area's street units into one district per truck,
-routes each district with `optimize` on the whole network, and checks the
+routes each district with `optimize` on the whole network, exchanges street
+units between neighbouring districts while that lowers the objective
+(`exchange.py`), solves the changed districts again, keeps the better of the
+two route sets by acceptance key, and checks the
 result with `check_route_set`, which re-derives every hard constraint from
 the routes themselves: invariants 1 to 4 for each route, and invariant 5
 for the set (exactly N routes, each serving at least one stop, every
@@ -15,11 +18,12 @@ solver itself starts no processes. Results are gathered by district index.
 """
 
 from collections import Counter, defaultdict
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 
 from starboard.solver.connections import ConnectionCosts
 from starboard.solver.districts import partition, unit_costs
+from starboard.solver.exchange import ExchangeProblem, exchange_units
 from starboard.solver.graph import Direction, Pass, SnappedStop, StateGraph, Transition
 from starboard.solver.objectives import (
     RouteObjective,
@@ -31,6 +35,7 @@ from starboard.solver.objectives import (
 )
 from starboard.solver.optimize import (
     OptimizedRoute,
+    Plan,
     SolveSettings,
     UnservedStop,
     optimize,
@@ -97,13 +102,15 @@ class FleetSettings:
     """How many trucks, what best means, and how each route is solved.
 
     `map_function` runs the district solves; pass a process pool's `map` to run them
-    in parallel. It must return results in the order of its inputs.
+    in parallel. It must return results in the order of its inputs. `exchange`
+    turns on the exchange of street units between districts after the first solve.
     """
 
     trucks: int
     objective: RouteObjective = RouteObjective.BALANCED_TOTAL
     solve: SolveSettings = field(default_factory=SolveSettings)
     map_function: Callable[..., Iterable[OptimizedRoute]] = map
+    exchange: bool = True
 
 
 def solve_routes(
@@ -133,52 +140,106 @@ def solve_routes(
     workable = [s for s in stops if s.required_pass not in reasons]
     carts = Counter({p: n for p, n in every.items() if p not in reasons})
     units = build_units(graph, carts)
+    costs_of_units = unit_costs(graph, connections, units, sites)
     if trucks == 1:
         district_of = {u.unit_id: 0 for u in units.units}
     else:
-        district_of = dict(
-            partition(units, trucks, unit_costs(graph, connections, units, sites)).district_of
-        )
+        district_of = dict(partition(units, trucks, costs_of_units).district_of)
 
     unit_of_segment = {sid: u.unit_id for u in units.units for sid in u.segment_ids}
-    by_district: dict[int, list[SnappedStop]] = defaultdict(list)
-    for stop in workable:
-        unit = unit_of_segment.get(stop.segment_id)
-        by_district[district_of[unit] if unit is not None else 0].append(stop)
-    order = list(warm_start if warm_start is not None else workable)
-    jobs = []
-    for d in range(trucks):
-        own = {s.stop_id for s in by_district[d]}
-        jobs.append(
-            _DistrictJob(
-                graph,
-                tuple(by_district[d]),
-                sites,
-                area_settings,
-                tuple(s for s in order if s.stop_id in own),
-            )
-        )
-    routes = tuple(map_function(_solve_district, jobs))
 
-    times = [r.plan.cost_ms for r in routes]
-    served = {p: n for p, n in carts.items() if any(p in r.plan.sequence for r in routes)}
-    total_bound, longest_bound = lower_bounds_ms(graph, connections, sites, served, trucks)
-    max_ms = settings.profile.max_route_duration_s
-    result = RouteSet(
-        routes=routes,
-        district_of=district_of,
-        objective=objective,
-        key=acceptance_key(objective, times, None if max_ms is None else round(max_ms * _MS_PER_S)),
-        total_ms=sum(times),
-        longest_ms=max(times, default=0),
-        total_bound_ms=total_bound,
-        longest_bound_ms=longest_bound,
-        gap=gap(sum(times), total_bound),
-        balance_met=balance_excess_ms(times) == 0,
-        unserved=(*early, *(u for r in routes for u in r.unserved)),
-    )
+    def stops_of(assignment: Mapping[str, int]) -> dict[int, list[SnappedStop]]:
+        by_district: dict[int, list[SnappedStop]] = defaultdict(list)
+        for stop in workable:
+            unit = unit_of_segment.get(stop.segment_id)
+            by_district[assignment[unit] if unit is not None else 0].append(stop)
+        return by_district
+
+    def job(stops: list[SnappedStop], order: Sequence[SnappedStop]) -> _DistrictJob:
+        own = {s.stop_id for s in stops}
+        warm = tuple(s for s in order if s.stop_id in own)
+        return _DistrictJob(graph, tuple(stops), sites, area_settings, warm)
+
+    order = list(warm_start if warm_start is not None else workable)
+    by_district = stops_of(district_of)
+    jobs = [job(by_district[d], order) for d in range(trucks)]
+    routes = tuple(map_function(_solve_district, jobs))
+    max_s = settings.profile.max_route_duration_s
+    max_ms = None if max_s is None else round(max_s * _MS_PER_S)
+    bounds = _Bounds(graph, connections, sites, carts, trucks, objective, max_ms)
+    result = bounds.route_set(routes, district_of, early)
+
+    if trucks > 1 and fleet.exchange:
+        problem = ExchangeProblem(
+            graph,
+            connections,
+            sites,
+            units,
+            carts,
+            costs_of_units.distance,
+            objective,
+            settings.profile.capacity_carts,
+            max_ms,
+        )
+        swapped = exchange_units(problem, district_of, [r.plan for r in routes])
+        if swapped.changed:
+            # The changed districts are solved again, from their exchanged orders.
+            by_district = stops_of(swapped.district_of)
+            changed = sorted(swapped.changed)
+            again = [job(by_district[d], _in_plan_order(swapped.plans[d], order)) for d in changed]
+            resolved = list(routes)
+            for d, route in zip(changed, map_function(_solve_district, again), strict=True):
+                resolved[d] = route
+            exchanged = bounds.route_set(tuple(resolved), swapped.district_of, early)
+            if exchanged.key < result.key:
+                result = exchanged
     check_route_set(area, settings, result, allowed)
     return result
+
+
+def _in_plan_order(plan: Plan, stops: Sequence[SnappedStop]) -> list[SnappedStop]:
+    """The stops in the order the plan serves their passes; others keep their order, last."""
+    rank = {p: k for k, p in enumerate(plan.sequence)}
+    return sorted(stops, key=lambda s: rank.get(s.required_pass, len(rank)))
+
+
+@dataclass(frozen=True, slots=True)
+class _Bounds:
+    """How good a set of routes is: the acceptance key, the lower bounds and the gap."""
+
+    graph: StateGraph
+    connections: ConnectionCosts
+    sites: RouteSites
+    carts: Mapping[Pass, int]
+    trucks: int
+    objective: RouteObjective
+    max_route_ms: int | None
+
+    def route_set(
+        self,
+        routes: tuple[OptimizedRoute, ...],
+        district_of: dict[str, int],
+        early: Sequence[UnservedStop],
+    ) -> RouteSet:
+        times = [r.plan.cost_ms for r in routes]
+        carts = self.carts
+        served = {p: n for p, n in carts.items() if any(p in r.plan.sequence for r in routes)}
+        total_bound, longest_bound = lower_bounds_ms(
+            self.graph, self.connections, self.sites, served, self.trucks
+        )
+        return RouteSet(
+            routes=routes,
+            district_of=district_of,
+            objective=self.objective,
+            key=acceptance_key(self.objective, times, self.max_route_ms),
+            total_ms=sum(times),
+            longest_ms=max(times, default=0),
+            total_bound_ms=total_bound,
+            longest_bound_ms=longest_bound,
+            gap=gap(sum(times), total_bound),
+            balance_met=balance_excess_ms(times) == 0,
+            unserved=(*early, *(u for r in routes for u in r.unserved)),
+        )
 
 
 def _ends(graph: StateGraph, p: Pass) -> tuple[int, int]:

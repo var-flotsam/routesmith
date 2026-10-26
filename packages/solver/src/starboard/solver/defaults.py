@@ -326,6 +326,28 @@ COMPACTNESS_WEIGHT = Tunable(
     "rather than long and thin.",
 )
 
+EXCHANGE_MAX_MOVES = Tunable(
+    value=50.0,
+    unit="moves",
+    reason="Most unit moves and swaps the exchange between districts keeps; it stops sooner "
+    "when none of the best-priced moves lowers the objective.",
+)
+
+EXCHANGE_TRIALS = Tunable(
+    value=5.0,
+    unit="moves",
+    reason="Best-priced moves re-optimised with local search on both changed routes before the "
+    "exchange stops; each costs two local searches.",
+)
+
+EXCHANGE_SWAP_CANDIDATES = Tunable(
+    value=5.0,
+    unit="units",
+    reason="Nearest units on the other side of a boundary each unit may swap with, so swaps "
+    "stay local and their number grows linearly with the boundary.",
+    source="https://doi.org/10.1287/ijoc.15.4.333.24890",
+)
+
 
 def all_tunables() -> dict[str, Tunable]:
     """Every module-level `Tunable` in this file, keyed by name."""
