@@ -156,6 +156,18 @@ label.inline {
   min-width: 12rem;
 }
 
+.banner {
+  margin: 0 0 1rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.headline {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
 /* Phones: one column, with room above and below a map to scroll past it. */
 @media (max-width: 40rem) {
   header {
