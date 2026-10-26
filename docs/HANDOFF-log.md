@@ -159,3 +159,47 @@
 
 - Merging #29 to #33 needs the owner: the safety check on this machine
   refuses merges.
+
+## 2026-10-26 (phase 4, API and worker)
+
+**Done**
+
+- #36: ADR-0004 covers the tables, org scoping (404 for another org), magic-link
+  sign-in, the run lifecycle and the object store. Splitting an area across days
+  is post-MVP.
+- #37: the `starboard-api` package, the tables, Alembic on PostGIS and `/healthz`.
+  CI runs a PostGIS service.
+- #38: magic-link sign-in, sessions, organizations, members and roles.
+- #39: the stop-file reader moves into geo.
+- #40: routes with a truck profile, a yard and a disposal site.
+- #41: stop uploads. The `starboard-worker` package and its `import_upload` job
+  snap stops; stops needing a planner go to the review list.
+- #42: clearing the review queue by placing a stop on a candidate street or
+  excluding it.
+- #43: runs. The `solve_run` job runs in a process pool, and the report
+  (`solver.comparison`) gives current against optimized.
+- #44: the Compose stack (PostGIS, Redis 7.2, migrations, API and worker),
+  built and started in CI.
+- #45: schemathesis on every operation. It found three spec mismatches, all
+  fixed.
+
+**Decisions taken as defaults (say if any should change)**
+
+- A stop outside the street network can only be excluded until the map lets
+  a planner click any street (phase 5).
+- Rule conflicts answer 409, and 422 is kept for validation errors.
+- Redis is pinned to 7.2, the last BSD release.
+
+**Next**
+
+- Phase 5: web v1 and deploying to a public URL.
+- GitHub and Google OAuth with the sign-in pages.
+- A real mail sender and S3-compatible storage for deployment.
+
+**Blocked on the owner**
+
+- The geocoder (HANDOFF §6, item 2). Until then, uploads need lon/lat.
+- Fly.io or Railway, and the domain (HANDOFF §6, item 4), before the phase 5
+  deploy.
+- Docker or Postgres on this machine. Until then, database tests run in CI only.
+- Merging #36 to #45.
