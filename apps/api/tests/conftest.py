@@ -7,7 +7,7 @@ otherwise. The database is migrated once and emptied before each test.
 import os
 import subprocess
 import sys
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -19,7 +19,13 @@ from sqlalchemy import text
 from starboard.api.app import create_app
 from starboard.api.email import RecordingEmailSender
 from starboard.api.models import Base
+from starboard.api.queue import IMPORT_UPLOAD, RecordingQueue
 from starboard.api.settings import Settings
+from starboard.api.storage import LocalObjectStore
+from starboard.geo.state_graph import build_state_graph
+from starboard.geo.synthetic import Grid
+from starboard.solver.graph import StateGraph
+from starboard.worker.jobs import Context, import_upload
 
 DATABASE_URL = os.environ.get("STARBOARD_TEST_DATABASE_URL")
 ROOT = Path(__file__).resolve().parents[3]
@@ -50,13 +56,30 @@ def migrated() -> None:
     assert result.returncode == 0, result.stderr
 
 
-class Api:
-    """The app, its recorded emails, and a way to get a signed-in client per user."""
+GRID = Grid()
 
-    def __init__(self, app: Any, sender: RecordingEmailSender) -> None:
+
+class Api:
+    """The app, its recorded emails and jobs, and a signed-in client per user.
+
+    `run_jobs` runs the queued worker jobs in-process, on the default synthetic grid.
+    """
+
+    def __init__(self, app: Any, sender: RecordingEmailSender, queue: RecordingQueue) -> None:
         self.app = app
         self.sender = sender
+        self.queue = queue
         self.clients: list[httpx.AsyncClient] = []
+        self.network: Callable[[Any], StateGraph] = lambda bbox: build_state_graph(GRID.segments())
+
+    async def run_jobs(self) -> list[str]:
+        context = Context(self.app.state.sessions, self.app.state.store, self.network)
+        jobs = {IMPORT_UPLOAD: import_upload}
+        outcomes = []
+        while self.queue.jobs:
+            name, row_id = self.queue.jobs.pop(0)
+            outcomes.append(await jobs[name]({"starboard": context}, str(row_id)))
+        return outcomes
 
     def client(self) -> httpx.AsyncClient:
         client = httpx.AsyncClient(
@@ -77,14 +100,14 @@ class Api:
 
 
 @pytest.fixture
-async def api(migrated: None) -> AsyncIterator[Api]:
+async def api(migrated: None, tmp_path: Path) -> AsyncIterator[Api]:
     settings = Settings(database_url=DATABASE_URL or "", cookie_secure=False)
-    sender = RecordingEmailSender()
-    app = create_app(settings, sender)
+    sender, queue = RecordingEmailSender(), RecordingQueue()
+    app = create_app(settings, sender, LocalObjectStore(tmp_path / "uploads"), queue)
     tables = ", ".join(t.name for t in reversed(Base.metadata.sorted_tables))
     async with app.state.engine.begin() as connection:
         await connection.execute(text(f"TRUNCATE {tables} CASCADE"))
-    harness = Api(app, sender)
+    harness = Api(app, sender, queue)
     yield harness
     for client in harness.clients:
         await client.aclose()

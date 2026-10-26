@@ -29,6 +29,8 @@ from starboard.geo.state_graph import RestrictionKind, TurnRestriction, build_st
 from starboard.solver.graph import LonLat, StateGraph, StreetSegment
 
 DEFAULT_CACHE_DIR = Path("cache/osm")
+# Room around the outermost stops and sites for the streets that bound them.
+NETWORK_MARGIN_M = 300.0
 
 # Controlled-access roads, with no driveways or curbside carts:
 # https://wiki.openstreetmap.org/wiki/Tag:highway%3Dmotorway and

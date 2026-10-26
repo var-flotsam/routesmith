@@ -24,7 +24,7 @@ from pathlib import Path
 import requests
 
 from starboard.geo.extract import download_extract
-from starboard.geo.osm import DEFAULT_CACHE_DIR, bbox_around, fetch_network
+from starboard.geo.osm import DEFAULT_CACHE_DIR, NETWORK_MARGIN_M, bbox_around, fetch_network
 from starboard.geo.places import place_at
 from starboard.geo.snapping import SnapOutcome, snap_stops
 from starboard.geo.stop_file import StopFile, read_stop_file
@@ -38,8 +38,6 @@ from starboard.solver.route import RouteSites, TruckProfile
 from starboard.solver.rules import RoutingRules, UTurnPolicy
 from starboard.solver.scorecard import Scorecard, area_scorecard, score
 
-# Room around the outermost stops and sites for the streets that bound them.
-NETWORK_MARGIN_M = 300.0
 _SECONDS_PER_HOUR = 3600.0
 _MS_PER_S = 1000
 

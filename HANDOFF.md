@@ -146,7 +146,7 @@ solver ever returns, on random synthetic grids. These tests gate every merge.
 | --- | --- |
 | API | FastAPI, pydantic v2, OpenAPI published |
 | Database | Postgres 16 + PostGIS; Alembic migrations |
-| Jobs | Redis + arq worker; one job type `solve_run` |
+| Jobs | Redis + arq worker; jobs `import_upload` and `solve_run` (ADR-0004) |
 | Solver | `starboard.solver` package, pure Python + OR-Tools, no I/O; callable from CLI and worker |
 | Frontend | TypeScript, React, Vite, MapLibre GL, TanStack Query |
 | Auth | Email magic link + GitHub/Google OAuth; sessions in Postgres; org-scoped row-level checks in the API layer |
