@@ -17,10 +17,12 @@ built-in `map` by default; a worker can pass a process pool's), so the
 solver itself starts no processes. Results are gathered by district index.
 """
 
+import math
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 
+from starboard.solver import defaults
 from starboard.solver.connections import ConnectionCosts
 from starboard.solver.districts import partition, unit_costs
 from starboard.solver.exchange import ExchangeProblem, exchange_units
@@ -111,6 +113,11 @@ class FleetSettings:
     solve: SolveSettings = field(default_factory=SolveSettings)
     map_function: Callable[..., Iterable[OptimizedRoute]] = map
     exchange: bool = True
+
+
+def trucks_for(stops: int) -> int:
+    """The fewest trucks that keep every route within `defaults.MAX_STOPS_PER_ROUTE` stops."""
+    return max(1, math.ceil(stops / defaults.MAX_STOPS_PER_ROUTE.value))
 
 
 def solve_routes(
