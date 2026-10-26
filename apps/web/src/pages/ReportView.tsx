@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useState, type ReactNode } from "react";
+import { Component, lazy, Suspense, useCallback, useState, type ReactNode } from "react";
 
 import type { Schemas } from "../api/client";
 import type { Layer, Trucks, View } from "../map/RouteMap";
@@ -7,6 +7,25 @@ import { Playback } from "./Playback";
 
 // The map library is large and needs WebGL, so it loads only when a map is shown.
 const RouteMap = lazy(async () => ({ default: (await import("../map/RouteMap")).RouteMap }));
+
+/** Without WebGL, or when the map's code fails to load, the map is left out and the rest
+ * of the result still shows. */
+class MapBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <p className="map large unavailable">
+        This browser cannot draw the map. The figures below are unaffected.
+      </p>
+    );
+  }
+}
 
 function Swatch({ colour }: { colour: string }) {
   return <span className="swatch" style={{ background: colour }} />;
@@ -122,38 +141,40 @@ export function ReportView({
               Side by side
             </label>
           </div>
-          <div className="layers" role="group" aria-label="Map layers">
-            <label className="inline">
-              <input
-                type="checkbox"
-                disabled={view === "split"}
-                checked={layers.has("current")}
-                onChange={() => toggle("current")}
+          {view === "overlay" && (
+            <div className="layers" role="group" aria-label="Map layers">
+              <label className="inline">
+                <input
+                  type="checkbox"
+                  checked={layers.has("current")}
+                  onChange={() => toggle("current")}
+                />
+                <Swatch colour={CURRENT_COLOUR} /> Current
+              </label>
+              <label className="inline">
+                <input
+                  type="checkbox"
+                  checked={layers.has("optimized")}
+                  onChange={() => toggle("optimized")}
+                />
+                {report.optimized.routes.map((_, index) => (
+                  <Swatch key={index} colour={truckColour(index)} />
+                ))}{" "}
+                Optimized
+              </label>
+            </div>
+          )}
+          <MapBoundary>
+            <Suspense fallback={<div className="map large">Loading the map…</div>}>
+              <RouteMap
+                current={report.current.routes.map((r) => r.path)}
+                optimized={report.optimized.routes.map((r) => r.path)}
+                shown={layers}
+                view={view}
+                trucks={trucks}
               />
-              <Swatch colour={CURRENT_COLOUR} /> Current
-            </label>
-            <label className="inline">
-              <input
-                type="checkbox"
-                disabled={view === "split"}
-                checked={layers.has("optimized")}
-                onChange={() => toggle("optimized")}
-              />
-              {report.optimized.routes.map((_, index) => (
-                <Swatch key={index} colour={truckColour(index)} />
-              ))}{" "}
-              Optimized
-            </label>
-          </div>
-          <Suspense fallback={<div className="map large">Loading the map…</div>}>
-            <RouteMap
-              current={report.current.routes.map((r) => r.path)}
-              optimized={report.optimized.routes.map((r) => r.path)}
-              shown={layers}
-              view={view}
-              trucks={trucks}
-            />
-          </Suspense>
+            </Suspense>
+          </MapBoundary>
           <Playback report={report} onTrucks={onTrucks} />
           <h2>The whole area</h2>
           <Comparison current={report.current.area} optimized={report.optimized.area} />

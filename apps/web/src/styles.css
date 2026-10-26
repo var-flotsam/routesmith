@@ -2,8 +2,9 @@
   color-scheme: light dark;
   font-family: system-ui, sans-serif;
   line-height: 1.5;
-  --muted: #6b7280;
-  --error: #b91c1c;
+  /* Light, then dark: at least 4.5:1 on the page background in each. */
+  --muted: light-dark(#6b7280, #9ca3af);
+  --error: light-dark(#b91c1c, #f87171);
 }
 
 body {
@@ -127,6 +128,22 @@ label.inline {
   gap: 0.5rem;
 }
 
+.split figure {
+  margin: 0;
+}
+
+.split figcaption {
+  font-weight: 600;
+}
+
+.map.unavailable {
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  text-align: center;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
 .playback {
   display: flex;
   flex-wrap: wrap;
@@ -137,4 +154,34 @@ label.inline {
 .playback input[type="range"] {
   flex: 1;
   min-width: 12rem;
+}
+
+/* Phones: one column, with room above and below a map to scroll past it. */
+@media (max-width: 40rem) {
+  header {
+    padding-inline: 1rem;
+  }
+
+  main {
+    padding: 1rem;
+  }
+
+  .split,
+  .review {
+    grid-template-columns: 1fr;
+  }
+
+  .map.large {
+    height: 55vh;
+  }
+
+  .layers {
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+  }
+
+  table {
+    display: block;
+    overflow-x: auto;
+  }
 }

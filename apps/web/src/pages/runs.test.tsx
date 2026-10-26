@@ -291,7 +291,8 @@ test("the routes can be shown side by side", async () => {
   renderApp("/orgs/o1/runs/run1");
   await userEvent.click(await screen.findByRole("radio", { name: "Side by side" }));
   expect(await screen.findByText(/^split map/)).toBeInTheDocument();
-  expect(screen.getByRole("checkbox", { name: /Current/ })).toBeDisabled();
+  // Each map is labelled instead; there is nothing to hide on its own map.
+  expect(screen.queryByRole("checkbox", { name: /Current/ })).toBeNull();
 });
 
 test("playback moves every truck on one clock, and shorter routes finish first", async () => {
