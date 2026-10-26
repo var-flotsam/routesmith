@@ -3,6 +3,7 @@
 Run with UPDATE_SNAPSHOTS=1 to write new snapshots after an intended change.
 """
 
+import importlib.util
 import os
 from pathlib import Path
 
@@ -14,8 +15,6 @@ SNAPSHOTS = Path(__file__).parent / "snapshots"
 
 
 def _sample():
-    import importlib.util
-
     spec = importlib.util.spec_from_file_location("sample", Path(__file__).parent / "sample.py")
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
