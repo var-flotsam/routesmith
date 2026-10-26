@@ -16,6 +16,7 @@ import pytest
 import schemathesis
 from hypothesis import HealthCheck, settings
 from schemathesis import Case
+from schemathesis.specs.openapi.checks import positive_data_acceptance
 
 from starboard.api.app import create_app
 from starboard.api.db import engine_for, session_maker
@@ -76,4 +77,8 @@ def test_every_operation_answers_as_the_spec_says(case: Case, owner: tuple[str, 
     token, org_id = owner
     if case.path_parameters and "org_id" in case.path_parameters:
         case.path_parameters["org_id"] = str(org_id)
-    case.call_and_validate(cookies={"starboard_session": token})
+    excluded = []
+    if case.path == "/auth/callback":
+        # Any well-formed token is schema-valid, but only a real, unused link signs in.
+        excluded.append(positive_data_acceptance)
+    case.call_and_validate(cookies={"starboard_session": token}, excluded_checks=excluded)
