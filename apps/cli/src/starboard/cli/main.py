@@ -28,8 +28,9 @@ from starboard.geo.extract import download_extract
 from starboard.geo.osm import DEFAULT_CACHE_DIR, bbox_around, fetch_network
 from starboard.geo.places import place_at
 from starboard.geo.snapping import SnapOutcome, snap_stops
+from starboard.solver import defaults
 from starboard.solver.baseline import build_baseline, current_routes, routes_by_id
-from starboard.solver.fleet import Area, FleetSettings, solve_routes
+from starboard.solver.fleet import Area, FleetSettings, solve_routes, trucks_for
 from starboard.solver.graph import LonLat, StateGraph
 from starboard.solver.objectives import RouteObjective
 from starboard.solver.optimize import SolveSettings, optimize
@@ -236,7 +237,8 @@ def optimize_command(args: argparse.Namespace) -> int:
     stops = loaded.outcome.snapped
     route_of = loaded.stop_file.route_of
     if args.trucks is None:
-        args.trucks = len(set(route_of.values())) or 1
+        # As many trucks as current routes, and enough that no route is over the stop limit.
+        args.trucks = max(len(set(route_of.values())), trucks_for(len(stops)))
     if args.trucks > 1 or route_of:
         return _optimize_fleet(args, loaded, SolveSettings(profile, rules))
     try:
@@ -288,6 +290,8 @@ def _optimize_fleet(args: argparse.Namespace, loaded: _Loaded, settings: SolveSe
         print(str(error), file=sys.stderr)
         return 1
     cards = [score(loaded.graph, r.route) for r in result.routes]
+    limit = round(defaults.MAX_STOPS_PER_ROUTE.value)
+    over_limit = [k + 1 for k, c in enumerate(cards) if c.stops_serviced > limit]
     route_of = loaded.stop_file.route_of
     current: dict[str, Scorecard] = {}
     if route_of:
@@ -306,6 +310,7 @@ def _optimize_fleet(args: argparse.Namespace, loaded: _Loaded, settings: SolveSe
         "total_lower_bound_s": result.total_bound_ms / _MS_PER_S,
         "gap": result.gap,
         "balance_met": result.balance_met,
+        "routes_over_stop_limit": over_limit,
         "unserved": dict(sorted(Counter(u.reason.value for u in result.unserved).items())),
     }
     if args.json:
@@ -339,6 +344,9 @@ def _optimize_fleet(args: argparse.Namespace, loaded: _Loaded, settings: SolveSe
     print(f"Total route time {total:,.0f} s, longest {longest:,.0f} s")
     print(f"Best found; at most {result.gap:.1%} above the lower bound of {bound:,.0f} s")
     print("Routes within the balance margin" if result.balance_met else "Balance margin not met")
+    if over_limit:
+        routes = ", ".join(str(k) for k in over_limit)
+        print(f"Over {limit:,} stops, the most for one truck in a day: route {routes}")
     _print_footer(loaded)
     return 0
 
@@ -383,7 +391,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--trucks",
         type=int,
         metavar="N",
-        help="split the area into N routes (default: the number of current routes, else 1)",
+        help=(
+            "split the area into N routes (default: the number of current routes, and at "
+            f"least enough that no route has over {defaults.MAX_STOPS_PER_ROUTE.value:,.0f} stops)"
+        ),
     )
     optimize_parser.add_argument(
         "--objective",

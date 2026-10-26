@@ -1,11 +1,13 @@
 import json
 import math
+from dataclasses import replace
 
 import requests
 
 from starboard.cli import main as cli
 from starboard.geo.state_graph import build_state_graph
 from starboard.geo.synthetic import Grid
+from starboard.solver import defaults
 
 GRID = Grid()
 
@@ -151,3 +153,25 @@ def test_score_prints_each_current_route_and_the_area(tmp_path, monkeypatch, cap
     assert cli.main(["score", str(routes_csv(tmp_path))]) == 0
     out = capsys.readouterr().out
     assert "Area" in out and " A " in out.splitlines()[3] + " "
+
+
+def _stop_limit(monkeypatch, value):
+    limit = replace(defaults.MAX_STOPS_PER_ROUTE, value=value)
+    monkeypatch.setattr(defaults, "MAX_STOPS_PER_ROUTE", limit)
+
+
+def test_optimize_uses_enough_trucks_for_the_stop_limit(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(
+        cli, "fetch_network", lambda bbox, cache_dir, extract: build_state_graph(GRID.segments())
+    )
+    yard = GRID.at(0, 0)
+    sites = [f"--yard={yard.lon},{yard.lat}", f"--disposal={yard.lon},{yard.lat}", "--json"]
+    _stop_limit(monkeypatch, 2.0)
+    assert cli.main(["optimize", str(stops_csv(tmp_path)), *sites]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert len(report["routes"]) == 2
+    assert report["area"]["routes_over_stop_limit"] == []
+    _stop_limit(monkeypatch, 1.0)
+    assert cli.main(["optimize", str(stops_csv(tmp_path)), *sites, "--trucks", "2"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["area"]["routes_over_stop_limit"]

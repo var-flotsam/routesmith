@@ -285,6 +285,14 @@ DEAD_HEAD_ESTIMATE_FACTOR = Tunable(
 )
 
 
+MAX_STOPS_PER_ROUTE = Tunable(
+    value=1000.0,
+    unit="stops",
+    reason="Most stops one truck serves in one day; an area with more is split among more "
+    "trucks. The owner's choice, 2026-10-26.",
+)
+
+
 BALANCE_MARGIN = Tunable(
     value=0.10,
     unit="fraction of the average route time",

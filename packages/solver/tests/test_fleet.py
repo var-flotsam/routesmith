@@ -12,8 +12,16 @@ from hypothesis import strategies as st
 from starboard.geo.snapping import Snapper, StopPoint
 from starboard.geo.state_graph import build_state_graph
 from starboard.geo.synthetic import Grid
+from starboard.solver import defaults
 from starboard.solver.districts import pieces
-from starboard.solver.fleet import Area, FleetSettings, RouteSetError, check_route_set, solve_routes
+from starboard.solver.fleet import (
+    Area,
+    FleetSettings,
+    RouteSetError,
+    check_route_set,
+    solve_routes,
+    trucks_for,
+)
 from starboard.solver.graph import Place, SnappedStop
 from starboard.solver.objectives import RouteObjective
 from starboard.solver.optimize import SolveSettings, optimize
@@ -179,3 +187,11 @@ def test_the_total_objective_without_a_maximum_duration_is_refused():
     )
     with pytest.raises(ValueError, match="maximum route duration"):
         solve_routes(area, fleet)
+
+
+def test_the_fewest_trucks_keep_every_route_within_the_stop_limit():
+    limit = round(defaults.MAX_STOPS_PER_ROUTE.value)
+    assert trucks_for(0) == 1
+    assert trucks_for(limit) == 1
+    assert trucks_for(limit + 1) == 2
+    assert trucks_for(10 * limit) == 10
