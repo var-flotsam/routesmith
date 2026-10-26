@@ -89,3 +89,24 @@ def test_a_route_file_supplies_the_sites_and_truck(tmp_path, monkeypatch, capsys
     assert cli.main(["optimize", str(stops_csv(tmp_path)), "--route", str(route), "--json"]) == 0
     report = json.loads(capsys.readouterr().out)
     assert report["optimized"]["disposal_visits"] >= 2
+
+
+def test_optimize_with_two_trucks_reports_two_routes(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(
+        cli, "fetch_network", lambda bbox, cache_dir, extract: build_state_graph(GRID.segments())
+    )
+    yard = GRID.at(0, 0)
+    args = [
+        "optimize",
+        str(stops_csv(tmp_path)),
+        f"--yard={yard.lon},{yard.lat}",
+        f"--disposal={yard.lon},{yard.lat}",
+        "--trucks",
+        "2",
+        "--json",
+    ]
+    assert cli.main(args) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert len(report["routes"]) == 2
+    assert sum(r["stops_serviced"] for r in report["routes"]) == 4
+    assert report["area"]["objective"] == "balanced-total"

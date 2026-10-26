@@ -250,6 +250,17 @@ LOCAL_SEARCH_MAX_ROUNDS = Tunable(
     "when no move improves.",
 )
 
+EXACT_MOVE_PRICING_MAX_PASSES = Tunable(
+    value=40.0,
+    unit="passes",
+    reason=(
+        "With a capacity, routes of up to this many passes price every 2-opt and or-opt move "
+        "with its unloads, so local search ends at a true local optimum; a scan costs about "
+        "n^3 DP steps, under a second at 40 passes. Longer routes pre-filter moves on the cost "
+        "without forced unloads."
+    ),
+)
+
 SPARE_DISPOSAL_VISITS = Tunable(
     value=2.0,
     unit="visits",

@@ -202,7 +202,8 @@ def test_small_routes_are_solved_to_the_brute_force_optimum(places, capacity):
         costs.best_unloads(list(order), capacity).cost_ms
         for order in itertools.permutations(costs.carts)
     )
-    result = optimize(GRAPH, stops, SITES, settings(capacity_carts=capacity))
+    # The default search size: the small one other tests use is not meant to find optima.
+    result = optimize(GRAPH, stops, SITES, SolveSettings(TruckProfile(capacity_carts=capacity)))
     assert result.plan.cost_ms == best
 
 
@@ -213,11 +214,7 @@ def test_small_routes_are_solved_to_the_brute_force_optimum(places, capacity):
 )
 @settings_(deadline=None)
 def test_local_search_ends_where_no_2_opt_or_or_opt_move_helps(places, capacity, rnd):
-    """With no capacity limit, moves are priced exactly, so the search ends at a local optimum.
-
-    With a capacity, moves are found on the cost without forced unloads and only then
-    priced with them, so the end is no worse than the start but need not be a local optimum.
-    """
+    """Short orders price every move exactly, so the search ends at a local optimum."""
     stops = [stop(f"s{k}", x, y) for k, (x, y) in enumerate(places)]
     costs = _costs_for(stops, capacity)
     assume(capacity is None or max(costs.carts.values()) <= capacity)
@@ -227,8 +224,6 @@ def test_local_search_ends_where_no_2_opt_or_or_opt_move_helps(places, capacity,
     assume(start.cost_ms < _INFEASIBLE_MS)
     improved = _improve(costs, start, capacity)
     assert improved.cost_ms <= start.cost_ms
-    if capacity is not None:
-        return
     sequence = list(improved.sequence)
     n = len(sequence)
     neighbours = [

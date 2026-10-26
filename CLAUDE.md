@@ -44,14 +44,19 @@ fail to get a merge through.
 ## Invariants (the solver's hard constraints)
 
 Every solution the solver returns, in tests or in production, satisfies all
-four. They are property-tested in `packages/solver/tests/test_properties.py`
-on random synthetic street grids and on the demo town.
+of these. They are property-tested in `packages/solver/tests/test_properties.py`
+on random synthetic street grids and on the demo town; invariant 5 is
+property-tested in `packages/solver/tests/test_fleet.py`, and
+`check_route_set` re-checks every route set before it is returned.
 
 1. Every serviced cart is on the truck's right at the moment of service.
 2. No travel against a one-way street.
 3. No U-turn where the configured rules forbid it.
 4. Route starts at the yard, visits a disposal site before the end (and
    whenever capacity would be exceeded), and ends at the yard.
+5. When an area is split among N trucks: exactly N routes, each serving at
+   least one stop; every servable stop served by exactly one route; all
+   routes start and end at the shared yard and use the shared disposal site.
 
 A change that makes a property test fail is wrong. Do not weaken, skip, or
 reparameterize a property test to make it pass; fix the solver or raise it
@@ -104,7 +109,9 @@ with the owner.
 - Domain vocabulary: *cart* (the bin), *stop* (a cart's location), *pass*
   (one traversal of one street segment in one direction), *curb side*
   (left/right relative to travel direction), *dead-head* (driving a segment
-  without servicing it), *run* (one solver execution), *scorecard* (the
+  without servicing it), *run* (one solver execution), *street unit* (a stretch of one street with
+all its required passes, which one truck serves), *district* (the street
+units one truck serves when an area is split), *scorecard* (the
   measures for a route), *current* vs *optimized* (never "before/after" in
   the UI; "current" is what the driver does today).
 
