@@ -109,14 +109,14 @@ jobs:
         with:
           python-version: "3.12"
       - run: corepack enable
-      - run: pnpm -C apps/web install --frozen-lockfile
+      # pnpm reads its version from apps/web/package.json, so it runs from there.
+      - run: pnpm install --frozen-lockfile
+        working-directory: apps/web
       - name: The API types match the API
         run: |
           uv sync --all-packages --locked
           uv run python -m starboard.api.openapi apps/web/openapi.json
-          pnpm -C apps/web api-types
+          (cd apps/web && pnpm api-types)
           git diff --exit-code -- apps/web/openapi.json apps/web/src/api/schema.d.ts
-      - run: pnpm -C apps/web lint
-      - run: pnpm -C apps/web typecheck
-      - run: pnpm -C apps/web test
-      - run: pnpm -C apps/web build
+      - run: pnpm lint && pnpm typecheck && pnpm test && pnpm build
+        working-directory: apps/web
