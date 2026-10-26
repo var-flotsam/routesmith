@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Link, useParams } from "react-router";
 
 import { api, dataOf, type Schemas } from "../api/client";
-import { ReviewMap } from "../map/ReviewMap";
+
+// The map library is large and needs WebGL, so it loads only when a map is shown.
+const ReviewMap = lazy(async () => ({ default: (await import("../map/ReviewMap")).ReviewMap }));
 
 type Stop = Schemas["StopOut"];
 type Side = Schemas["CurbSide"];
@@ -109,7 +111,11 @@ export function ReviewPage() {
               {REASONS[selected.review_reason ?? ""] ?? selected.review_reason}
               {selected.review_detail && <span className="muted"> ({selected.review_detail})</span>}
             </p>
-            {selected.lon !== null && <ReviewMap stop={selected} chosen={hovered} />}
+            {selected.lon !== null && (
+              <Suspense fallback={<div className="map">Loading the map…</div>}>
+                <ReviewMap stop={selected} chosen={hovered} />
+              </Suspense>
+            )}
             {selected.candidate_streets.length === 0 && (
               <p>There is no street to choose for this stop; leave it out of the routes.</p>
             )}

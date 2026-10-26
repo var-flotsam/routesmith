@@ -69,7 +69,7 @@ test("a planner puts a corner lot on the street they pick, on the curb its point
   });
   renderApp("/orgs/o1/uploads/up1/review");
   expect(await screen.findByRole("heading", { name: "Stop s7" })).toBeInTheDocument();
-  expect(screen.getByText("map of s7")).toBeInTheDocument();
+  expect(await screen.findByText("map of s7")).toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "Collect from Byram Rd" }));
   await waitFor(() => expect(screen.getByRole("heading", { name: "Stop s9" })).toBeInTheDocument());
   expect(calls.find((c) => c.key.endsWith("/placement"))?.body).toEqual({
