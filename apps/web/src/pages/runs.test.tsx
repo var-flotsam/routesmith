@@ -171,6 +171,41 @@ test("a finished run shows current against optimized for the area", async () => 
   expect(screen.getByText(/s9/)).toBeInTheDocument();
 });
 
+test("a finished run links to its route sheet, stop list and route paths", async () => {
+  fakeApi({
+    "GET /me": { status: 200, body: ME },
+    "GET /orgs/o1/runs/run1": { status: 200, body: RUN },
+    "GET /orgs/o1/runs/run1/result": { status: 200, body: REPORT },
+    "GET /orgs/o1/runs/run1/share-link": { status: 200, body: NOT_SHARED },
+    "GET /orgs/o1/uploads/up1/stops": { status: 200, body: [] },
+  });
+  renderApp("/orgs/o1/runs/run1");
+  const links = {
+    "Driver route sheets (PDF)": "route-sheet.pdf",
+    "Stops in the new order (CSV)": "stops.csv",
+    "Route paths for GPS units (GPX)": "routes.gpx",
+    "Route paths for Google Earth (KML)": "routes.kml",
+  };
+  for (const [name, file] of Object.entries(links)) {
+    const link = await screen.findByRole("link", { name });
+    expect(link).toHaveAttribute(
+      "href",
+      `${window.location.origin}/api/orgs/o1/runs/run1/exports/${file}`,
+    );
+    expect(link).toHaveAttribute("download");
+  }
+});
+
+test("a run that is still solving offers nothing to download", async () => {
+  fakeApi({
+    "GET /me": { status: 200, body: ME },
+    "GET /orgs/o1/runs/run1": { status: 200, body: { ...RUN, state: "running" } },
+  });
+  renderApp("/orgs/o1/runs/run1");
+  expect(await screen.findByText(/Solving for 2 trucks/)).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Downloads" })).not.toBeInTheDocument();
+});
+
 test("a failed run says why", async () => {
   fakeApi({
     "GET /me": { status: 200, body: ME },
@@ -316,6 +351,8 @@ test("a shared result opens without signing in", async () => {
   renderApp("/shared/abc");
   expect(await screen.findByRole("heading", { name: "Byram" })).toBeInTheDocument();
   expect(screen.getByRole("rowheader", { name: "Route time" })).toBeInTheDocument();
+  // The exports carry stop locations the shared page does not show.
+  expect(screen.queryByRole("heading", { name: "Downloads" })).not.toBeInTheDocument();
   expect(calls.map((c) => c.key)).not.toContain("GET /me");
 });
 
