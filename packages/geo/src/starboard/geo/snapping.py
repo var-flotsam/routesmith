@@ -60,6 +60,17 @@ class ReviewItem:
 
 
 @dataclass(frozen=True, slots=True)
+class Candidate:
+    """A street a stop in review could be on: its line, name, and the curb the stop is on,
+    relative to the street's forward direction."""
+
+    segment_id: str
+    name: str | None
+    side_of_forward: CurbSide
+    geometry: tuple[LonLat, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class SnapOutcome:
     snapped: tuple[SnappedStop, ...]
     review: tuple[ReviewItem, ...]
@@ -162,6 +173,18 @@ class Snapper:
             street=stop.street,
         )
 
+    def candidate(self, stop: StopPoint, segment_id: str) -> "Candidate":
+        """A street a planner may put the stop on, drawn and with the curb the point is on.
+
+        A point on the centerline gets the right curb of the street's forward direction.
+        KeyError for an unknown street.
+        """
+        index = self._index_of[segment_id]
+        segment, line = self._segments[index], self._lines[index]
+        point = Point(self._projection.to_xy(stop.location))
+        side, _ = _side_of(line, line.project(point), point)
+        return Candidate(segment_id, segment.name, side or CurbSide.RIGHT, segment.geometry)
+
     def place(self, stop: StopPoint, segment_id: str, side: CurbSide) -> SnappedStop:
         """The stop on the street and curb a planner chose; KeyError for an unknown street.
 
@@ -184,7 +207,11 @@ class Snapper:
 
 
 def snap_stops(graph: StateGraph, stops: Iterable[StopPoint]) -> SnapOutcome:
-    snapper = Snapper(graph)
+    return snap_with(Snapper(graph), stops)
+
+
+def snap_with(snapper: Snapper, stops: Iterable[StopPoint]) -> SnapOutcome:
+    """Snap stops with a snapper already built, so it can be asked about candidates after."""
     snapped: list[SnappedStop] = []
     review: list[ReviewItem] = []
     for stop in stops:
