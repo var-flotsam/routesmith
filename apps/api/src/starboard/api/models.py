@@ -44,6 +44,12 @@ class StopState(StrEnum):
     REJECTED = "rejected"
 
 
+class UploadState(StrEnum):
+    PROCESSING = "processing"  # waiting for the worker to read and snap it
+    READY = "ready"
+    FAILED = "failed"
+
+
 class RunState(StrEnum):
     QUEUED = "queued"
     RUNNING = "running"
@@ -115,8 +121,15 @@ class Upload(Base):
     route_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("routes.id", ondelete="CASCADE"))
     file_name: Mapped[str] = mapped_column(String(255))
     object_key: Mapped[str] = mapped_column(String(255))
+    state: Mapped[UploadState] = mapped_column(
+        Enum(UploadState, name="upload_state", values_callable=lambda e: [m.value for m in e])
+    )
     rows_read: Mapped[int]
     rows_rejected: Mapped[int]
+    # Rows the reader could not use: [{"line": n, "reason": "..."}].
+    rejected_rows: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, server_default="[]")
+    osm_snapshot: Mapped[str | None] = mapped_column(String(40))
+    failure_reason: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = _created()
 
 
@@ -136,9 +149,16 @@ class Stop(Base):
     state: Mapped[StopState] = mapped_column(
         Enum(StopState, name="stop_state", values_callable=lambda e: [m.value for m in e])
     )
+    # Where the stop snapped, kept so a run solves exactly what the planner reviewed.
     segment_id: Mapped[str | None] = mapped_column(String(100))
-    curb_side: Mapped[str | None] = mapped_column(String(5))
+    curb_side: Mapped[str | None] = mapped_column(String(5))  # side of the segment, forward
+    required_direction: Mapped[str | None] = mapped_column(String(8))
+    distance_along_m: Mapped[float | None]
+    distance_from_centerline_m: Mapped[float | None]
     review_reason: Mapped[str | None] = mapped_column(String(100))
+    review_detail: Mapped[str | None] = mapped_column(String(500))
+    # The streets a stop in review could belong to, for the planner to choose from.
+    candidate_segment_ids: Mapped[list[str]] = mapped_column(JSONB, server_default="[]")
 
 
 class Run(Base):

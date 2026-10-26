@@ -3,7 +3,7 @@ name = "routesmith"
 version = "0.0.0"
 description = "Starboard Routing workspace root"
 requires-python = ">=3.12,<3.13"
-dependencies = ["starboard-solver", "starboard-geo", "starboard-export", "starboard-cli", "starboard-api"]
+dependencies = ["starboard-solver", "starboard-geo", "starboard-export", "starboard-cli", "starboard-api", "starboard-worker"]
 
 [dependency-groups]
 dev = [
@@ -21,7 +21,7 @@ dev = [
 package = false
 
 [tool.uv.workspace]
-members = ["packages/*", "apps/cli", "apps/api"]
+members = ["packages/*", "apps/cli", "apps/api", "apps/worker"]
 
 [tool.uv.sources]
 starboard-solver = { workspace = true }
@@ -29,6 +29,7 @@ starboard-geo = { workspace = true }
 starboard-export = { workspace = true }
 starboard-cli = { workspace = true }
 starboard-api = { workspace = true }
+starboard-worker = { workspace = true }
 
 [tool.ruff]
 line-length = 100
@@ -47,8 +48,8 @@ known-first-party = ["starboard"]
 [tool.mypy]
 strict = true
 python_version = "3.12"
-files = ["packages/solver/src", "packages/geo/src", "packages/export/src", "apps/cli/src", "apps/api/src"]
-mypy_path = ["packages/solver/src", "packages/geo/src", "packages/export/src", "apps/cli/src", "apps/api/src"]
+files = ["packages/solver/src", "packages/geo/src", "packages/export/src", "apps/cli/src", "apps/api/src", "apps/worker/src"]
+mypy_path = ["packages/solver/src", "packages/geo/src", "packages/export/src", "apps/cli/src", "apps/api/src", "apps/worker/src"]
 namespace_packages = true
 explicit_package_bases = true
 

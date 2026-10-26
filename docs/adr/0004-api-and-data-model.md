@@ -72,6 +72,18 @@ expiring after `SESSION_TTL` without use. GitHub and Google OAuth come in
 phase 5 with the sign-in pages, since they need client registrations under
 the owner's accounts.
 
+### Uploads
+
+Snapping needs the street network, and building it for a new area can take
+minutes, so an upload is handled by a second worker job, `import_upload`.
+The API stores the file, writes an upload marked `processing` and queues
+the job; the worker reads the rows, builds the network around the stops and
+the route's sites, snaps every stop, and marks the upload `ready` (or
+`failed`, with the reason). Each stop keeps where it snapped (segment, side,
+distance along) and the OSM snapshot date, so a run solves exactly what the
+planner reviewed. Stops in review keep the reason and the candidate streets
+to choose from.
+
 ### Runs
 
 `POST .../runs` checks that the upload has no stops left in review (HANDOFF

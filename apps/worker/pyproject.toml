@@ -1,0 +1,19 @@
+[project]
+name = "starboard-worker"
+version = "0.0.0"
+description = "The Starboard Routing worker: snaps uploads and solves runs off the request path"
+requires-python = ">=3.12,<3.13"
+license = "FSL-1.1-ALv2"
+dependencies = ["starboard-api", "starboard-geo", "starboard-solver", "arq>=0.26"]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/starboard"]
+
+[tool.uv.sources]
+starboard-api = { workspace = true }
+starboard-geo = { workspace = true }
+starboard-solver = { workspace = true }
