@@ -31,7 +31,8 @@ export function fakeApi(answers: Record<string, Answer | Answer[]>): Call[] {
     const listed = answers[key];
     const answer = Array.isArray(listed) ? (listed.length > 1 ? listed.shift() : listed[0]) : listed;
     if (answer === undefined) throw new Error(`no fake answer for ${key}`);
-    return new Response(JSON.stringify(answer.body), {
+    // A 204 has no body at all.
+    return new Response(answer.status === 204 ? null : JSON.stringify(answer.body), {
       status: answer.status,
       headers: { "Content-Type": "application/json" },
     });
