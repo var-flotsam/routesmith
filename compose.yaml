@@ -11,8 +11,12 @@ x-app: &app
     STARBOARD_UPLOAD_DIR: /app/cache/uploads
     STARBOARD_OSM_CACHE_DIR: /app/cache/osm
     STARBOARD_COOKIE_SECURE: "false"
+    # An OSM extract under ./cache to build street networks from, where Overpass is out of
+    # reach; set it in .env, e.g. /app/cache/osm/extracts/connecticut-latest.osm.pbf.
+    STARBOARD_OSM_EXTRACT: ${STARBOARD_OSM_EXTRACT:-}
   volumes:
-    - app-cache:/app/cache
+    # The checkout's cache/, so street networks and extracts the CLI fetched are reused.
+    - ./cache:/app/cache
 
 services:
   db:
@@ -84,4 +88,3 @@ services:
 volumes:
   web-modules:
   db-data:
-  app-cache:

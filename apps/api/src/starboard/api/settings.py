@@ -6,6 +6,7 @@ These are deployment settings, not solver tunables; each default has its reason.
 from datetime import timedelta
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -35,5 +36,12 @@ class Settings(BaseSettings):
     geocode_cache_dir: Path = Path("cache/geocode")
     # An OSM extract (.osm.pbf) to build networks from instead of Overpass, if set.
     osm_extract: Path | None = None
+
+    @field_validator("osm_extract", mode="before")
+    @classmethod
+    def _unset_when_blank(cls, value: object) -> object:
+        """An empty STARBOARD_OSM_EXTRACT, as Compose passes when it is unset, means none."""
+        return None if value == "" else value
+
     # A planner's stop list is a few thousand rows; this leaves room for a whole area.
     max_upload_bytes: int = 20 * 1024 * 1024
