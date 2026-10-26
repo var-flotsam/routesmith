@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document><name>Byram &amp; Mill</name>
+    <Placemark><name>Byram &amp; Mill, route 1</name>
+      <LineString><coordinates>-73.650000,41.000000 -73.649000,41.000000 -73.649000,41.001000</coordinates></LineString>
+    </Placemark>
+    <Placemark><name>Byram &amp; Mill, route 2</name>
+      <LineString><coordinates>-73.651000,41.002000 -73.652000,41.002000</coordinates></LineString>
+    </Placemark>
+  </Document>
+</kml>

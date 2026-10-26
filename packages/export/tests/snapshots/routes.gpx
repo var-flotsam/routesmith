@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Starboard Routing" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>Byram &amp; Mill, route 1</name><trkseg>
+    <trkpt lat="41.000000" lon="-73.650000"/>
+    <trkpt lat="41.000000" lon="-73.649000"/>
+    <trkpt lat="41.001000" lon="-73.649000"/>
+  </trkseg></trk>
+  <trk><name>Byram &amp; Mill, route 2</name><trkseg>
+    <trkpt lat="41.002000" lon="-73.651000"/>
+    <trkpt lat="41.002000" lon="-73.652000"/>
+  </trkseg></trk>
+</gpx>

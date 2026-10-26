@@ -1,0 +1,5 @@
+route,sequence,stop_id,street,lon,lat,current_route,current_sequence
+1,1,s2,Mill St,-73.649700,41.000100,,2
+1,2,s1,Mill St,-73.649500,41.000100,,1
+2,1,s3,Byram Rd,-73.651100,41.002100,,3
+2,2,s9,,,,,
