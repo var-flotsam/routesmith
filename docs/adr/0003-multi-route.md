@@ -134,6 +134,11 @@ results byte for byte.
 (the worker passes a process pool's), so the solver itself stays pure. Wall time
 is about ⌈N / P⌉ district solves plus the exchange loop, for P processes; a
 benchmark at 1,000, 3,000 and 10,000 stops sets the search budgets.
+Each truck gets 1,000 stops, the owner's limit for one truck in one day
+(2026-10-26). On synthetic grids, single process, the default budgets give
+88 s for 1,000 stops on 1 truck, 12 min for 3,000 on 3, and 48 min for
+10,000 on 10, with gaps of 21%, 25% and 29% to the lower bound
+(`uv run pytest packages/solver -m benchmark -s`).
 
 ### New tunables (`packages/solver/defaults.py`)
 
