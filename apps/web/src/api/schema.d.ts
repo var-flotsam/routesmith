@@ -400,6 +400,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * Action
+         * @enum {string}
+         */
+        Action: "depart" | "left" | "right" | "straight" | "u_turn" | "unload" | "arrive";
         /** Body_upload_stops_orgs__org_id__routes__route_id__uploads_post */
         Body_upload_stops_orgs__org_id__routes__route_id__uploads_post: {
             /** File */
@@ -531,6 +536,8 @@ export interface components {
                 number
             ][];
             scorecard: components["schemas"]["ScorecardOut"];
+            /** Steps */
+            steps: components["schemas"]["StepOut"][];
         };
         /** OptimizedSide */
         OptimizedSide: {
@@ -757,6 +764,19 @@ export interface components {
             report: components["schemas"]["RunReport"];
             /** Route Name */
             route_name: string;
+        };
+        /**
+         * StepOut
+         * @description One line of a driver's route sheet (`starboard.solver.route_sheet`).
+         */
+        StepOut: {
+            action: components["schemas"]["Action"];
+            /** Distance M */
+            distance_m: number;
+            /** Stop Ids */
+            stop_ids: string[];
+            /** Street */
+            street: string | null;
         };
         /** StopOut */
         StopOut: {

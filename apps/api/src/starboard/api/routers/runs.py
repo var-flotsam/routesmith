@@ -24,6 +24,7 @@ from starboard.api.queue import SOLVE_RUN
 from starboard.api.scoping import in_org, one_in_org, result_in_org
 from starboard.solver.fleet import trucks_for
 from starboard.solver.objectives import RouteObjective, check_objective
+from starboard.solver.route_sheet import Action
 
 router = APIRouter(
     tags=["runs"],
@@ -189,10 +190,20 @@ class CurrentRoute(BaseModel):
     path: list[tuple[float, float]]  # [lon, lat] points in driving order
 
 
+class StepOut(BaseModel):
+    """One line of a driver's route sheet (`starboard.solver.route_sheet`)."""
+
+    action: Action
+    street: str | None
+    distance_m: float
+    stop_ids: list[str]
+
+
 class OptimizedRoute(BaseModel):
     scorecard: ScorecardOut
     order: list[str]  # stop ids in the order collected
     path: list[tuple[float, float]]  # [lon, lat] points in driving order
+    steps: list[StepOut]  # the route sheet
 
 
 class CurrentSide(BaseModel):
