@@ -148,3 +148,48 @@ test("a failed run says why", async () => {
   renderApp("/orgs/o1/runs/run1");
   expect(await screen.findByText(/The run failed: ConnectionError: no network/)).toBeInTheDocument();
 });
+
+test("the stop table lists each stop's current and optimized place, moved most first", async () => {
+  const stop = (stopId: string, sequence: number) => ({
+    stop_id: stopId,
+    lon: -73.6,
+    lat: 41.0,
+    current_sequence: sequence,
+    current_route_id: null,
+    street: "Mill St",
+    state: "snapped",
+    segment_id: "seg",
+    curb_side: "right",
+    review_reason: null,
+    review_detail: null,
+    candidate_segment_ids: [],
+    candidate_streets: [],
+  });
+  const oneTruck = {
+    ...REPORT,
+    trucks: 1,
+    optimized: {
+      routes: [{ scorecard: card(16362, 37146, 3), order: ["s3", "s1", "s2"] }],
+      area: card(16362, 37146, 3),
+    },
+  };
+  fakeApi({
+    "GET /me": { status: 200, body: ME },
+    "GET /orgs/o1/runs/run1": { status: 200, body: { ...RUN, trucks: 1 } },
+    "GET /orgs/o1/runs/run1/result": { status: 200, body: oneTruck },
+    "GET /orgs/o1/uploads/up1/stops": {
+      status: 200,
+      body: [stop("s1", 1), stop("s2", 2), stop("s3", 3)],
+    },
+  });
+  renderApp("/orgs/o1/runs/run1");
+  const firstColumn = () =>
+    screen
+      .getAllByRole("row")
+      .map((row) => within(row).queryAllByRole("cell")[0]?.textContent)
+      .filter((text) => text?.startsWith("s"));
+  await screen.findByRole("columnheader", { name: "Optimized order" });
+  expect(firstColumn()).toEqual(["s3", "s1", "s2"]);
+  await userEvent.click(screen.getByLabelText("Stops that moved most first"));
+  expect(firstColumn()[0]).toBe("s3");
+});

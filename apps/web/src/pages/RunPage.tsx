@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router";
 
 import { api, dataOf, type Schemas } from "../api/client";
+import { StopTable } from "./StopTable";
 
 type Scorecard = Schemas["ScorecardOut"];
 
@@ -137,6 +138,12 @@ export function RunPage() {
               ))}
             </tbody>
           </table>
+          {run.data && (
+            <>
+              <h2>Stops</h2>
+              <StopTable orgId={orgId} uploadId={run.data.upload_id} report={report.data} />
+            </>
+          )}
           {report.data.unserved.length > 0 && (
             <>
               <h2>Stops no route can serve</h2>
