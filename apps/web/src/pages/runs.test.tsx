@@ -182,7 +182,7 @@ test("a finished run links to its route sheet, stop list and route paths", async
   renderApp("/orgs/o1/runs/run1");
   const links = {
     "Driver route sheets (PDF)": "route-sheet.pdf",
-    "Stops in the new order (CSV)": "stops.csv",
+    "Stops in the optimized order (CSV)": "stops.csv",
     "Route paths for GPS units (GPX)": "routes.gpx",
     "Route paths for Google Earth (KML)": "routes.kml",
   };

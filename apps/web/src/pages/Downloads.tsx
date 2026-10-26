@@ -3,7 +3,7 @@ import type { Schemas } from "../api/client";
 // Each file the API makes from a run, named as a dispatcher would look for it.
 const FILES: { file: Schemas["ExportFile"]; label: string }[] = [
   { file: "route-sheet.pdf", label: "Driver route sheets (PDF)" },
-  { file: "stops.csv", label: "Stops in the new order (CSV)" },
+  { file: "stops.csv", label: "Stops in the optimized order (CSV)" },
   { file: "routes.gpx", label: "Route paths for GPS units (GPX)" },
   { file: "routes.kml", label: "Route paths for Google Earth (KML)" },
 ];
