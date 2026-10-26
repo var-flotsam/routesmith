@@ -97,3 +97,9 @@ button.secondary {
   text-decoration: underline;
   cursor: pointer;
 }
+
+label.inline {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
