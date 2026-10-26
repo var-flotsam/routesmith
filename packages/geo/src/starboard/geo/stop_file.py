@@ -10,6 +10,7 @@ reason; reading never raises on the file's contents.
 
 import csv
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -49,33 +50,38 @@ def _parse_row(row: dict[str, str]) -> tuple[int, StopPoint] | str:
     return sequence, StopPoint(stop_id, LonLat(lon=lon, lat=lat), street=street)
 
 
-def read_stop_file(path: Path) -> StopFile:
-    with path.open(encoding="utf-8-sig", newline="") as handle:
-        reader = csv.DictReader(handle)
-        missing = [c for c in REQUIRED_COLUMNS if c not in (reader.fieldnames or [])]
-        if missing:
-            return StopFile((), (RejectedRow(1, f"missing columns: {', '.join(missing)}"),))
-        with_routes = "route_id" in (reader.fieldnames or [])
-        ordered: list[tuple[int, int, StopPoint]] = []
-        rejected: list[RejectedRow] = []
-        route_of: dict[str, str] = {}
-        seen: set[str] = set()
-        for line_number, row in enumerate(reader, start=2):
-            parsed = _parse_row(row)
-            if isinstance(parsed, str):
-                rejected.append(RejectedRow(line_number, parsed))
-                continue
-            sequence, stop = parsed
-            if stop.stop_id in seen:
-                rejected.append(RejectedRow(line_number, f"duplicate stop_id {stop.stop_id}"))
-                continue
-            route_id = (row.get("route_id") or "").strip()
-            if with_routes and not route_id:
-                rejected.append(RejectedRow(line_number, "no route_id"))
-                continue
-            seen.add(stop.stop_id)
-            if route_id:
-                route_of[stop.stop_id] = route_id
-            ordered.append((sequence, line_number, stop))
+def read_stop_rows(handle: Iterable[str]) -> StopFile:
+    """Read stop rows from text lines, such as an open file or an uploaded body."""
+    reader = csv.DictReader(handle)
+    missing = [c for c in REQUIRED_COLUMNS if c not in (reader.fieldnames or [])]
+    if missing:
+        return StopFile((), (RejectedRow(1, f"missing columns: {', '.join(missing)}"),))
+    with_routes = "route_id" in (reader.fieldnames or [])
+    ordered: list[tuple[int, int, StopPoint]] = []
+    rejected: list[RejectedRow] = []
+    route_of: dict[str, str] = {}
+    seen: set[str] = set()
+    for line_number, row in enumerate(reader, start=2):
+        parsed = _parse_row(row)
+        if isinstance(parsed, str):
+            rejected.append(RejectedRow(line_number, parsed))
+            continue
+        sequence, stop = parsed
+        if stop.stop_id in seen:
+            rejected.append(RejectedRow(line_number, f"duplicate stop_id {stop.stop_id}"))
+            continue
+        route_id = (row.get("route_id") or "").strip()
+        if with_routes and not route_id:
+            rejected.append(RejectedRow(line_number, "no route_id"))
+            continue
+        seen.add(stop.stop_id)
+        if route_id:
+            route_of[stop.stop_id] = route_id
+        ordered.append((sequence, line_number, stop))
     ordered.sort(key=lambda item: item[:2])
     return StopFile(tuple(stop for _, _, stop in ordered), tuple(rejected), route_of)
+
+
+def read_stop_file(path: Path) -> StopFile:
+    with path.open(encoding="utf-8-sig", newline="") as handle:
+        return read_stop_rows(handle)

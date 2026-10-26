@@ -23,11 +23,11 @@ from pathlib import Path
 
 import requests
 
-from starboard.cli.stop_file import StopFile, read_stop_file
 from starboard.geo.extract import download_extract
 from starboard.geo.osm import DEFAULT_CACHE_DIR, bbox_around, fetch_network
 from starboard.geo.places import place_at
 from starboard.geo.snapping import SnapOutcome, snap_stops
+from starboard.geo.stop_file import StopFile, read_stop_file
 from starboard.solver import defaults
 from starboard.solver.baseline import build_baseline, current_routes, routes_by_id
 from starboard.solver.fleet import Area, FleetSettings, solve_routes, trucks_for
