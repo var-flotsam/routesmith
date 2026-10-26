@@ -364,6 +364,23 @@ export interface components {
             file: string;
         };
         /**
+         * CandidateStreet
+         * @description A street a stop in review could be on: its line, and the curb the stop's point is on
+         *     relative to the line's direction. Placing the stop there takes this curb by default.
+         */
+        CandidateStreet: {
+            curb_side: components["schemas"]["CurbSide"];
+            /** Line */
+            line: [
+                number,
+                number
+            ][];
+            /** Name */
+            name: string | null;
+            /** Segment Id */
+            segment_id: string;
+        };
+        /**
          * CurbSide
          * @description Which curb, relative to a direction of travel.
          * @enum {string}
@@ -578,12 +595,18 @@ export interface components {
         StopOut: {
             /** Candidate Segment Ids */
             candidate_segment_ids: string[];
+            /** Candidate Streets */
+            candidate_streets: components["schemas"]["CandidateStreet"][];
             /** Curb Side */
             curb_side: string | null;
             /** Current Route Id */
             current_route_id: string | null;
             /** Current Sequence */
             current_sequence: number;
+            /** Lat */
+            lat: number | null;
+            /** Lon */
+            lon: number | null;
             /** Review Detail */
             review_detail: string | null;
             /** Review Reason */

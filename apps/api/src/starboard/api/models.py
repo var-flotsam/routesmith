@@ -161,6 +161,8 @@ class Stop(Base):
     review_detail: Mapped[str | None] = mapped_column(String(500))
     # The streets a stop in review could belong to, for the planner to choose from.
     candidate_segment_ids: Mapped[list[str]] = mapped_column(JSONB, server_default="[]")
+    # The same streets drawn: [{"segment_id", "name", "curb_side", "line": [[lon, lat], ...]}].
+    candidate_streets: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, server_default="[]")
 
 
 class Run(Base):

@@ -15,6 +15,54 @@
         "title": "Body_upload_stops_orgs__org_id__routes__route_id__uploads_post",
         "type": "object"
       },
+      "CandidateStreet": {
+        "description": "A street a stop in review could be on: its line, and the curb the stop's point is on\nrelative to the line's direction. Placing the stop there takes this curb by default.",
+        "properties": {
+          "curb_side": {
+            "$ref": "#/components/schemas/CurbSide"
+          },
+          "line": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Line",
+            "type": "array"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "segment_id": {
+            "title": "Segment Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "segment_id",
+          "name",
+          "curb_side",
+          "line"
+        ],
+        "title": "CandidateStreet",
+        "type": "object"
+      },
       "CurbSide": {
         "description": "Which curb, relative to a direction of travel.",
         "enum": [
@@ -579,6 +627,13 @@
             "title": "Candidate Segment Ids",
             "type": "array"
           },
+          "candidate_streets": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateStreet"
+            },
+            "title": "Candidate Streets",
+            "type": "array"
+          },
           "curb_side": {
             "anyOf": [
               {
@@ -604,6 +659,28 @@
           "current_sequence": {
             "title": "Current Sequence",
             "type": "integer"
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat"
+          },
+          "lon": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lon"
           },
           "review_detail": {
             "anyOf": [
@@ -659,6 +736,8 @@
         },
         "required": [
           "stop_id",
+          "lon",
+          "lat",
           "current_sequence",
           "current_route_id",
           "street",
@@ -667,7 +746,8 @@
           "curb_side",
           "review_reason",
           "review_detail",
-          "candidate_segment_ids"
+          "candidate_segment_ids",
+          "candidate_streets"
         ],
         "title": "StopOut",
         "type": "object"

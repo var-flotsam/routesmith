@@ -148,3 +148,13 @@ def test_a_planner_placement_takes_the_chosen_street_and_side():
 def test_a_placement_on_an_unknown_street_is_refused():
     with pytest.raises(KeyError):
         SNAPPER.place(StopPoint("p", at(10, 10)), "no-such-street", CurbSide.RIGHT)
+
+
+def test_a_candidate_street_carries_its_line_and_the_curb_the_stop_is_on():
+    # South of row 0's first block: on the right when driving east (forward).
+    stop = StopPoint("p", at(BLOCK_M / 2, -10))
+    candidate = SNAPPER.candidate(stop, "h-0-0")
+    assert candidate.side_of_forward is CurbSide.RIGHT
+    assert candidate.geometry == GRAPH.segments["h-0-0"].geometry
+    north = SNAPPER.candidate(StopPoint("q", at(BLOCK_M / 2, 10)), "h-0-0")
+    assert north.side_of_forward is CurbSide.LEFT

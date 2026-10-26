@@ -5,7 +5,9 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
+from geoalchemy2.shape import to_shape
 from pydantic import BaseModel
+from shapely.geometry import Point
 from sqlalchemy import func, select
 
 from starboard.api.deps import IN_ORG, Database, member
@@ -48,8 +50,20 @@ class UploadOut(BaseModel):
     created_at: datetime
 
 
+class CandidateStreet(BaseModel):
+    """A street a stop in review could be on: its line, and the curb the stop's point is on
+    relative to the line's direction. Placing the stop there takes this curb by default."""
+
+    segment_id: str
+    name: str | None
+    curb_side: CurbSide
+    line: list[tuple[float, float]]  # [lon, lat] pairs
+
+
 class StopOut(BaseModel):
     stop_id: str
+    lon: float | None
+    lat: float | None
     current_sequence: int
     current_route_id: str | None
     street: str | None
@@ -59,6 +73,7 @@ class StopOut(BaseModel):
     review_reason: str | None
     review_detail: str | None
     candidate_segment_ids: list[str]
+    candidate_streets: list[CandidateStreet]
 
 
 class Placement(BaseModel):
@@ -69,8 +84,12 @@ class Placement(BaseModel):
 
 
 def _stop_out(s: Stop) -> StopOut:
+    point = None if s.location is None else to_shape(s.location)
+    assert point is None or isinstance(point, Point)
     return StopOut(
         stop_id=s.stop_id,
+        lon=None if point is None else point.x,
+        lat=None if point is None else point.y,
         current_sequence=s.current_sequence,
         current_route_id=s.current_route_id,
         street=s.street,
@@ -80,6 +99,7 @@ def _stop_out(s: Stop) -> StopOut:
         review_reason=s.review_reason,
         review_detail=s.review_detail,
         candidate_segment_ids=s.candidate_segment_ids,
+        candidate_streets=[CandidateStreet(**c) for c in s.candidate_streets],
     )
 
 

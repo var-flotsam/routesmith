@@ -40,7 +40,14 @@ from starboard.api.storage import ObjectStore
 from starboard.geo.geocoding import GeocodeQuality, Geocoder, geocode_all
 from starboard.geo.osm import NETWORK_MARGIN_M, BoundingBox, bbox_around
 from starboard.geo.places import place_at
-from starboard.geo.snapping import ReviewItem, ReviewReason, Snapper, StopPoint, snap_stops
+from starboard.geo.snapping import (
+    Candidate,
+    ReviewItem,
+    ReviewReason,
+    Snapper,
+    StopPoint,
+    snap_with,
+)
 from starboard.geo.stop_file import read_stop_rows
 from starboard.solver.comparison import ComparisonRequest, compare
 from starboard.solver.graph import CurbSide, Direction, LonLat, Pass, SnappedStop, StateGraph
@@ -130,7 +137,8 @@ async def _import(db: AsyncSession, context: Context, upload: Upload) -> None:
         graph = await asyncio.to_thread(context.network, bbox_around(corners, NETWORK_MARGIN_M))
         upload.osm_snapshot = graph.osm_snapshot
         in_order = [points[i] for i in stop_file.order if i in points]
-        outcome = await asyncio.to_thread(snap_stops, graph, in_order)
+        snapper = await asyncio.to_thread(Snapper, graph)
+        outcome = await asyncio.to_thread(snap_with, snapper, in_order)
         placed.update({r.stop_id: r for r in outcome.review})
         for snapped in outcome.snapped:
             if snapped.stop_id in geocoded.inexact:
@@ -143,6 +151,14 @@ async def _import(db: AsyncSession, context: Context, upload: Upload) -> None:
                 )
             else:
                 placed[snapped.stop_id] = snapped
+    # Each street a stop in review could be on, drawn, for the planner to pick on the map.
+    candidates: dict[str, list[dict[str, Any]]] = {}
+    for stop_id, item in placed.items():
+        if isinstance(item, ReviewItem) and item.candidate_segment_ids and stop_id in points:
+            candidates[stop_id] = [
+                _candidate_json(snapper.candidate(points[stop_id], segment_id))
+                for segment_id in item.candidate_segment_ids
+            ]
     streets = {u.stop_id: u.street for u in stop_file.unlocated}
     for sequence, stop_id in enumerate(stop_file.order, start=1):
         point = points.get(stop_id)
@@ -155,8 +171,18 @@ async def _import(db: AsyncSession, context: Context, upload: Upload) -> None:
             location=None if point is None else _point(point.location),
             street=point.street if point is not None else streets.get(stop_id),
         )
+        row.candidate_streets = candidates.get(stop_id, [])
         db.add(_placed(row, placed[stop_id]))
     upload.state = UploadState.READY
+
+
+def _candidate_json(candidate: Candidate) -> dict[str, Any]:
+    return {
+        "segment_id": candidate.segment_id,
+        "name": candidate.name,
+        "curb_side": candidate.side_of_forward.value,
+        "line": [[p.lon, p.lat] for p in candidate.geometry],
+    }
 
 
 _UNPLACED = {

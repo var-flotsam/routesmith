@@ -67,6 +67,11 @@ async def test_the_review_queue_lists_stops_the_planner_must_place(api):
     # s5 sits mid-block, as near one street as another: the planner picks.
     assert [(s["stop_id"], s["review_reason"]) for s in review] == [("s5", "ambiguous_street")]
     assert len(review[0]["candidate_segment_ids"]) >= 2
+    # Each candidate comes drawn, with the curb the stop's point is on.
+    streets = review[0]["candidate_streets"]
+    assert [c["segment_id"] for c in streets] == review[0]["candidate_segment_ids"]
+    assert all(len(c["line"]) >= 2 and c["curb_side"] in ("left", "right") for c in streets)
+    assert review[0]["lon"] is not None and review[0]["lat"] is not None
     every = (await client.get(f"/orgs/{org}/uploads/{upload['id']}/stops")).json()
     assert [s["stop_id"] for s in every] == ["s1", "s2", "s3", "s4", "s5"]
     snapped = every[0]
