@@ -18,7 +18,7 @@ def _route(yard=(0, 0)):
 def _csv(*, with_routes=False):
     header = "stop_id,current_sequence,lon,lat" + (",route_id" if with_routes else "")
     rows = [header]
-    # Four stops beside streets, then one in the middle of a block, then a bad row.
+    # Four stops beside streets, one in the middle of a block, then a bad row.
     points = [(20, -10), (60, -10), (110, 50), (150, 90), (50, 50)]
     for index, (x, y) in enumerate(points, start=1):
         p = GRID.at(x, y)
@@ -64,7 +64,9 @@ async def test_the_review_queue_lists_stops_the_planner_must_place(api):
     upload = (await _upload(client, org, route)).json()
     await api.run_jobs()
     review = (await client.get(f"/orgs/{org}/uploads/{upload['id']}/stops?state=review")).json()
-    assert [(s["stop_id"], s["review_reason"]) for s in review] == [("s5", "outside_network")]
+    # s5 sits mid-block, as near one street as another: the planner picks.
+    assert [(s["stop_id"], s["review_reason"]) for s in review] == [("s5", "ambiguous_street")]
+    assert len(review[0]["candidate_segment_ids"]) >= 2
     every = (await client.get(f"/orgs/{org}/uploads/{upload['id']}/stops")).json()
     assert [s["stop_id"] for s in every] == ["s1", "s2", "s3", "s4", "s5"]
     snapped = every[0]
