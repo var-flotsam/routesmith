@@ -4,7 +4,7 @@ import { Link, useParams } from "react-router";
 
 import { api, dataOf, type Schemas } from "../api/client";
 import { CURRENT_COLOUR, truckColour } from "../map/style";
-import type { Layer } from "../map/RouteMap";
+import type { Layer, View } from "../map/RouteMap";
 import { StopTable } from "./StopTable";
 
 // The map library is large and needs WebGL, so it loads only when a map is shown.
@@ -90,6 +90,7 @@ export function RunPage() {
   });
   const succeeded = run.data?.state === "succeeded";
   const [layers, setLayers] = useState<Set<Layer>>(new Set(["current", "optimized"]));
+  const [view, setView] = useState<View>("overlay");
   function toggle(layer: Layer) {
     const next = new Set(layers);
     if (next.has(layer)) next.delete(layer);
@@ -132,10 +133,31 @@ export function RunPage() {
           {report.data.time_limited && (
             <p className="muted">The search hit its time ceiling; another machine may differ.</p>
           )}
+          <div className="layers" role="group" aria-label="Map view">
+            <label className="inline">
+              <input
+                type="radio"
+                name="view"
+                checked={view === "overlay"}
+                onChange={() => setView("overlay")}
+              />
+              One map
+            </label>
+            <label className="inline">
+              <input
+                type="radio"
+                name="view"
+                checked={view === "split"}
+                onChange={() => setView("split")}
+              />
+              Side by side
+            </label>
+          </div>
           <div className="layers" role="group" aria-label="Map layers">
             <label className="inline">
               <input
                 type="checkbox"
+                disabled={view === "split"}
                 checked={layers.has("current")}
                 onChange={() => toggle("current")}
               />
@@ -144,6 +166,7 @@ export function RunPage() {
             <label className="inline">
               <input
                 type="checkbox"
+                disabled={view === "split"}
                 checked={layers.has("optimized")}
                 onChange={() => toggle("optimized")}
               />
@@ -158,6 +181,7 @@ export function RunPage() {
               current={report.data.current.routes.map((r) => r.path)}
               optimized={report.data.optimized.routes.map((r) => r.path)}
               shown={layers}
+              view={view}
             />
           </Suspense>
           <h2>The whole area</h2>

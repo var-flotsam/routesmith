@@ -7,10 +7,15 @@ import { fakeApi, ME, renderApp } from "../test-helpers";
 
 // The map needs WebGL, which the test browser lacks; it reports what it was given instead.
 vi.mock("../map/RouteMap", () => ({
-  RouteMap: (props: { current: unknown[]; optimized: unknown[]; shown: Set<string> }) => (
+  RouteMap: (props: {
+    current: unknown[];
+    optimized: unknown[];
+    shown: Set<string>;
+    view: string;
+  }) => (
     <div>
-      map of {props.current.length} current and {props.optimized.length} optimized routes,
-      showing {[...props.shown].sort().join(" and ")}
+      {props.view} map of {props.current.length} current and {props.optimized.length} optimized
+      routes, showing {[...props.shown].sort().join(" and ")}
     </div>
   ),
 }));
@@ -218,8 +223,21 @@ test("the run map shows both route sets, and each can be hidden", async () => {
   });
   renderApp("/orgs/o1/runs/run1");
   expect(
-    await screen.findByText(/map of 1 current and 2 optimized routes, showing current and optimized/),
+    await screen.findByText(/overlay map of 1 current and 2 optimized routes, showing current and optimized/),
   ).toBeInTheDocument();
   await userEvent.click(screen.getByRole("checkbox", { name: /Current/ }));
   expect(await screen.findByText(/showing optimized$/)).toBeInTheDocument();
+});
+
+test("the routes can be shown side by side", async () => {
+  fakeApi({
+    "GET /me": { status: 200, body: ME },
+    "GET /orgs/o1/runs/run1": { status: 200, body: RUN },
+    "GET /orgs/o1/runs/run1/result": { status: 200, body: REPORT },
+    "GET /orgs/o1/uploads/up1/stops": { status: 200, body: [] },
+  });
+  renderApp("/orgs/o1/runs/run1");
+  await userEvent.click(await screen.findByRole("radio", { name: "Side by side" }));
+  expect(await screen.findByText(/^split map/)).toBeInTheDocument();
+  expect(screen.getByRole("checkbox", { name: /Current/ })).toBeDisabled();
 });
