@@ -275,6 +275,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/orgs/{org_id}/runs/{run_id}/share-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Share State */
+        get: operations["share_state_orgs__org_id__runs__run_id__share_link_get"];
+        /**
+         * Share Run
+         * @description Make a read-only link to the run's result; any earlier link to it stops working.
+         */
+        put: operations["share_run_orgs__org_id__runs__run_id__share_link_put"];
+        post?: never;
+        /** Stop Sharing */
+        delete: operations["stop_sharing_orgs__org_id__runs__run_id__share_link_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/orgs/{org_id}/uploads/{upload_id}": {
         parameters: {
             query?: never;
@@ -347,6 +369,26 @@ export interface paths {
          *     A stop with no candidate street (outside the network) can only be excluded.
          */
         put: operations["place_stop_orgs__org_id__uploads__upload_id__stops__stop_id__placement_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shared/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Shared
+         * @description A shared run's result. Needs no sign-in: the link is the permission.
+         */
+        get: operations["read_shared_shared__token__get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -468,6 +510,16 @@ export interface components {
              * Format: uuid
              */
             upload_id: string;
+        };
+        /** NewShareLink */
+        NewShareLink: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Url */
+            url: string;
         };
         /** OptimizedRoute */
         OptimizedRoute: {
@@ -687,6 +739,24 @@ export interface components {
             wrong_side_pickups: number;
             /** Wrong Side Time S */
             wrong_side_time_s: number;
+        };
+        /** ShareLinkState */
+        ShareLinkState: {
+            /** Created At */
+            created_at: string | null;
+            /** Shared */
+            shared: boolean;
+        };
+        /**
+         * SharedRun
+         * @description What a share link shows: the route's name, when the run finished, and its report.
+         */
+        SharedRun: {
+            /** Finished At */
+            finished_at: string | null;
+            report: components["schemas"]["RunReport"];
+            /** Route Name */
+            route_name: string;
         };
         /** StopOut */
         StopOut: {
@@ -1948,6 +2018,197 @@ export interface operations {
             };
         };
     };
+    share_state_orgs__org_id__runs__run_id__share_link_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+                run_id: string;
+            };
+            cookie?: {
+                starboard_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareLinkState"];
+                };
+            };
+            /** @description the request body could not be read */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description the caller's role is too low for this */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description no such organization for the caller, or no such row in it */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    share_run_orgs__org_id__runs__run_id__share_link_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+                run_id: string;
+            };
+            cookie?: {
+                starboard_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewShareLink"];
+                };
+            };
+            /** @description the request body could not be read */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description the caller's role is too low for this */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description no such organization for the caller, or no such row in it */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description the run has not succeeded */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_sharing_orgs__org_id__runs__run_id__share_link_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+                run_id: string;
+            };
+            cookie?: {
+                starboard_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description the request body could not be read */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description the caller's role is too low for this */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description no such organization for the caller, or no such row in it */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     read_upload_orgs__org_id__uploads__upload_id__get: {
         parameters: {
             query?: never;
@@ -2244,6 +2505,51 @@ export interface operations {
             };
             /** @description the file is too large */
             413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_shared_shared__token__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharedRun"];
+                };
+            };
+            /** @description the request body could not be read */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description no such link, or it was taken away */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

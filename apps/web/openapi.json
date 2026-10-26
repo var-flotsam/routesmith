@@ -300,6 +300,25 @@
         "title": "NewRun",
         "type": "object"
       },
+      "NewShareLink": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "created_at"
+        ],
+        "title": "NewShareLink",
+        "type": "object"
+      },
       "OptimizedRoute": {
         "properties": {
           "order": {
@@ -895,6 +914,63 @@
           "disposal_visits"
         ],
         "title": "ScorecardOut",
+        "type": "object"
+      },
+      "ShareLinkState": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "shared": {
+            "title": "Shared",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "shared",
+          "created_at"
+        ],
+        "title": "ShareLinkState",
+        "type": "object"
+      },
+      "SharedRun": {
+        "description": "What a share link shows: the route's name, when the run finished, and its report.",
+        "properties": {
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "report": {
+            "$ref": "#/components/schemas/RunReport"
+          },
+          "route_name": {
+            "title": "Route Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "route_name",
+          "finished_at",
+          "report"
+        ],
+        "title": "SharedRun",
         "type": "object"
       },
       "StopOut": {
@@ -2596,6 +2672,242 @@
         ]
       }
     },
+    "/orgs/{org_id}/runs/{run_id}/share-link": {
+      "delete": {
+        "operationId": "stop_sharing_orgs__org_id__runs__run_id__share_link_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "starboard_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Starboard Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "the request body could not be read"
+          },
+          "401": {
+            "description": "not signed in"
+          },
+          "403": {
+            "description": "the caller's role is too low for this"
+          },
+          "404": {
+            "description": "no such organization for the caller, or no such row in it"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stop Sharing",
+        "tags": [
+          "share links"
+        ]
+      },
+      "get": {
+        "operationId": "share_state_orgs__org_id__runs__run_id__share_link_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "starboard_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Starboard Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareLinkState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "the request body could not be read"
+          },
+          "401": {
+            "description": "not signed in"
+          },
+          "403": {
+            "description": "the caller's role is too low for this"
+          },
+          "404": {
+            "description": "no such organization for the caller, or no such row in it"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Share State",
+        "tags": [
+          "share links"
+        ]
+      },
+      "put": {
+        "description": "Make a read-only link to the run's result; any earlier link to it stops working.",
+        "operationId": "share_run_orgs__org_id__runs__run_id__share_link_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "starboard_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Starboard Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewShareLink"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "the request body could not be read"
+          },
+          "401": {
+            "description": "not signed in"
+          },
+          "403": {
+            "description": "the caller's role is too low for this"
+          },
+          "404": {
+            "description": "no such organization for the caller, or no such row in it"
+          },
+          "409": {
+            "description": "the run has not succeeded"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Share Run",
+        "tags": [
+          "share links"
+        ]
+      }
+    },
     "/orgs/{org_id}/uploads/{upload_id}": {
       "get": {
         "operationId": "read_upload_orgs__org_id__uploads__upload_id__get",
@@ -2992,6 +3304,55 @@
         "summary": "Place Stop",
         "tags": [
           "uploads"
+        ]
+      }
+    },
+    "/shared/{token}": {
+      "get": {
+        "description": "A shared run's result. Needs no sign-in: the link is the permission.",
+        "operationId": "read_shared_shared__token__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "the request body could not be read"
+          },
+          "404": {
+            "description": "no such link, or it was taken away"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Shared",
+        "tags": [
+          "share links"
         ]
       }
     }
