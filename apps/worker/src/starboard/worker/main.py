@@ -17,6 +17,7 @@ from starboard.api.db import engine_for, session_maker
 from starboard.api.queue import IMPORT_UPLOAD, SOLVE_RUN
 from starboard.api.settings import Settings
 from starboard.api.storage import LocalObjectStore
+from starboard.geo.geocoding import CensusGeocoder
 from starboard.geo.osm import fetch_network
 from starboard.worker.jobs import Context, import_upload, solve_run
 
@@ -38,6 +39,7 @@ async def _startup(ctx: dict[str, Any]) -> None:
         network=partial(
             fetch_network, cache_dir=_settings.osm_cache_dir, extract=_settings.osm_extract
         ),
+        geocoder=CensusGeocoder(_settings.geocode_cache_dir),
         run_blocking=in_pool,
     )
 

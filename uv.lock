@@ -1271,6 +1271,7 @@ dependencies = [
     { name = "osmium" },
     { name = "osmnx" },
     { name = "pydantic" },
+    { name = "requests" },
     { name = "shapely" },
     { name = "starboard-solver" },
 ]
@@ -1281,6 +1282,7 @@ requires-dist = [
     { name = "osmium", specifier = ">=4.0" },
     { name = "osmnx", specifier = ">=2.0" },
     { name = "pydantic", specifier = ">=2.7" },
+    { name = "requests", specifier = ">=2.31" },
     { name = "shapely", specifier = ">=2.0" },
     { name = "starboard-solver", editable = "packages/solver" },
 ]

@@ -46,6 +46,9 @@ class ReviewReason(StrEnum):
     AMBIGUOUS_STREET = "ambiguous_street"
     SIDE_UNDETERMINED = "side_undetermined"
     WRONG_SIDE_OF_ONE_WAY = "wrong_side_of_one_way"
+    ADDRESS_NOT_FOUND = "address_not_found"
+    ADDRESS_AMBIGUOUS = "address_ambiguous"
+    ADDRESS_INEXACT = "address_inexact"  # placed after the geocoder changed the address
 
 
 @dataclass(frozen=True, slots=True)
