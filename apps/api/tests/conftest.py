@@ -7,7 +7,7 @@ otherwise. The database is migrated once and emptied before each test.
 import os
 import subprocess
 import sys
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -22,6 +22,7 @@ from starboard.api.models import Base
 from starboard.api.queue import IMPORT_UPLOAD, SOLVE_RUN, RecordingQueue
 from starboard.api.settings import Settings
 from starboard.api.storage import LocalObjectStore
+from starboard.geo.geocoding import Address, GeocodeOutcome, GeocodeQuality
 from starboard.geo.state_graph import build_state_graph
 from starboard.geo.synthetic import Grid
 from starboard.solver.graph import StateGraph
@@ -59,6 +60,29 @@ def migrated() -> None:
 GRID = Grid()
 
 
+class FakeGeocoder:
+    """Tests: addresses "x,y" on the grid are found there; "maybe x,y" is an inexact match;
+    "twice" is ambiguous; anything else is not found."""
+
+    def geocode(self, addresses: Sequence[Address]) -> list[GeocodeOutcome]:
+        outcomes = []
+        for address in addresses:
+            text = address.street
+            quality = GeocodeQuality.EXACT
+            if text.startswith("maybe "):
+                text, quality = text.removeprefix("maybe "), GeocodeQuality.INEXACT
+            if text == "twice":
+                outcomes.append(GeocodeOutcome(GeocodeQuality.AMBIGUOUS))
+                continue
+            try:
+                x, y = (float(part) for part in text.split(" "))
+            except ValueError:
+                outcomes.append(GeocodeOutcome(GeocodeQuality.NOT_FOUND))
+                continue
+            outcomes.append(GeocodeOutcome(quality, GRID.at(x, y), f"{text} on the grid"))
+        return outcomes
+
+
 class Api:
     """The app, its recorded emails and jobs, and a signed-in client per user.
 
@@ -71,9 +95,12 @@ class Api:
         self.queue = queue
         self.clients: list[httpx.AsyncClient] = []
         self.network: Callable[[Any], StateGraph] = lambda bbox: build_state_graph(GRID.segments())
+        self.geocoder = FakeGeocoder()
 
     async def run_jobs(self) -> list[str]:
-        context = Context(self.app.state.sessions, self.app.state.store, self.network)
+        context = Context(
+            self.app.state.sessions, self.app.state.store, self.network, self.geocoder
+        )
         jobs = {IMPORT_UPLOAD: import_upload, SOLVE_RUN: solve_run}
         outcomes = []
         while self.queue.jobs:

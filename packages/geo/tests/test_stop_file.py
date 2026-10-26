@@ -76,3 +76,26 @@ def test_rows_read_from_text_lines_match_a_file(tmp_path):
     text = "stop_id,current_sequence,lon,lat\nb,2,-73.0,41.0\na,1,-73.1,41.1\n"
     from_text = read_stop_rows(text.splitlines(keepends=True))
     assert from_text == read_stop_file(write(tmp_path, text))
+
+
+def test_a_row_with_only_an_address_waits_for_the_geocoder(tmp_path):
+    path = write(
+        tmp_path,
+        "stop_id,current_sequence,house_number,street,city,state,zip,lon,lat\n"
+        "b,2,12,Elm St,Town,CT,06830,,\n"
+        "a,1,1,Main St,Town,CT,06830,-73.0,41.0\n"
+        "c,3,,,,,,,\n",
+    )
+    stop_file = read_stop_file(path)
+    assert [s.stop_id for s in stop_file.stops] == ["a"]
+    (unlocated,) = stop_file.unlocated
+    assert unlocated.stop_id == "b"
+    assert unlocated.address.one_line() == "12 Elm St, Town, CT, 06830"
+    assert stop_file.order == ("a", "b")
+    assert [r.reason for r in stop_file.rejected] == ["no lon/lat and no address"]
+
+
+def test_an_address_column_is_enough_to_place_stops(tmp_path):
+    stop_file = read_stop_file(write(tmp_path, "stop_id,current_sequence,address\na,1,1 Main St\n"))
+    assert stop_file.rejected == ()
+    assert stop_file.unlocated[0].address.street == "1 Main St"

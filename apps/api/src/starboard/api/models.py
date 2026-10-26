@@ -145,7 +145,8 @@ class Stop(Base):
     stop_id: Mapped[str] = mapped_column(String(100))
     current_sequence: Mapped[int]
     current_route_id: Mapped[str | None] = mapped_column(String(100))
-    location: Mapped[Any] = mapped_column(_point())  # PostGIS point, untyped in GeoAlchemy2
+    # A PostGIS point, untyped in GeoAlchemy2; none for an address the geocoder could not place.
+    location: Mapped[Any | None] = mapped_column(_point(), nullable=True)
     street: Mapped[str | None] = mapped_column(String(200))
     state: Mapped[StopState] = mapped_column(
         Enum(StopState, name="stop_state", values_callable=lambda e: [m.value for m in e])

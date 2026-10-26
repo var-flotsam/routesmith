@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     upload_dir: Path = Path("cache/uploads")
     # The street network cache, shared with the CLI.
     osm_cache_dir: Path = Path("cache/osm")
+    # Geocoder answers, kept so an address is asked for once.
+    geocode_cache_dir: Path = Path("cache/geocode")
     # An OSM extract (.osm.pbf) to build networks from instead of Overpass, if set.
     osm_extract: Path | None = None
     # A planner's stop list is a few thousand rows; this leaves room for a whole area.

@@ -37,9 +37,10 @@ from starboard.api.models import (
     UploadState,
 )
 from starboard.api.storage import ObjectStore
+from starboard.geo.geocoding import GeocodeQuality, Geocoder, geocode_all
 from starboard.geo.osm import NETWORK_MARGIN_M, BoundingBox, bbox_around
 from starboard.geo.places import place_at
-from starboard.geo.snapping import ReviewItem, Snapper, StopPoint, snap_stops
+from starboard.geo.snapping import ReviewItem, ReviewReason, Snapper, StopPoint, snap_stops
 from starboard.geo.stop_file import read_stop_rows
 from starboard.solver.comparison import ComparisonRequest, compare
 from starboard.solver.graph import CurbSide, Direction, LonLat, Pass, SnappedStop, StateGraph
@@ -59,6 +60,7 @@ class Context:
     sessions: async_sessionmaker[AsyncSession]
     store: ObjectStore
     network: Callable[[BoundingBox], StateGraph]  # blocking; runs in a thread
+    geocoder: Geocoder  # blocking; runs in a thread
     # Runs the CPU-bound solve; the worker passes a process pool, tests run it in a thread.
     run_blocking: Callable[..., Awaitable[Any]] = asyncio.to_thread
 
@@ -103,41 +105,67 @@ async def _import(db: AsyncSession, context: Context, upload: Upload) -> None:
     assert route is not None
     text = (await context.store.get(upload.object_key)).decode("utf-8-sig")
     stop_file = read_stop_rows(text.splitlines(keepends=True))
-    upload.rows_read = len(stop_file.stops) + len(stop_file.rejected)
+    readable = len(stop_file.stops) + len(stop_file.unlocated)
+    upload.rows_read = readable + len(stop_file.rejected)
     upload.rows_rejected = len(stop_file.rejected)
     upload.rejected_rows = [{"line": r.line_number, "reason": r.reason} for r in stop_file.rejected]
     await db.execute(delete(Stop).where(Stop.upload_id == upload.id))
-    if stop_file.stops:
-        points = [s.location for s in stop_file.stops]
-        points += [_lon_lat(route.yard), _lon_lat(route.disposal)]
-        bbox = bbox_around(points, NETWORK_MARGIN_M)
-        graph = await asyncio.to_thread(context.network, bbox)
-        outcome = await asyncio.to_thread(snap_stops, graph, stop_file.stops)
+
+    # Stops given by address only are geocoded in one batch.
+    geocoded = await asyncio.to_thread(
+        geocode_all, context.geocoder, [(u.stop_id, u.address) for u in stop_file.unlocated]
+    )
+    points = {s.stop_id: s for s in stop_file.stops}
+    for unlocated in stop_file.unlocated:
+        if unlocated.stop_id in geocoded.points:
+            location = geocoded.points[unlocated.stop_id]
+            points[unlocated.stop_id] = StopPoint(unlocated.stop_id, location, unlocated.street)
+    placed: dict[str, SnappedStop | ReviewItem] = {
+        stop_id: ReviewItem(stop_id, _UNPLACED[quality], "the geocoder could not place it")
+        for stop_id, quality in geocoded.unplaced.items()
+    }
+    if points:
+        corners = [p.location for p in points.values()]
+        corners += [_lon_lat(route.yard), _lon_lat(route.disposal)]
+        graph = await asyncio.to_thread(context.network, bbox_around(corners, NETWORK_MARGIN_M))
         upload.osm_snapshot = graph.osm_snapshot
-        placed: dict[str, SnappedStop | ReviewItem] = {s.stop_id: s for s in outcome.snapped}
+        in_order = [points[i] for i in stop_file.order if i in points]
+        outcome = await asyncio.to_thread(snap_stops, graph, in_order)
         placed.update({r.stop_id: r for r in outcome.review})
-        for sequence, stop in enumerate(stop_file.stops, start=1):
-            route_id = stop_file.route_of.get(stop.stop_id)
-            db.add(_row(upload, sequence, stop, route_id, placed[stop.stop_id]))
+        for snapped in outcome.snapped:
+            if snapped.stop_id in geocoded.inexact:
+                # The geocoder changed the address to place it: a planner confirms the street.
+                detail = (
+                    f"placed as {geocoded.matched_address.get(snapped.stop_id, 'a nearby address')}"
+                )
+                placed[snapped.stop_id] = ReviewItem(
+                    snapped.stop_id, ReviewReason.ADDRESS_INEXACT, detail, (snapped.segment_id,)
+                )
+            else:
+                placed[snapped.stop_id] = snapped
+    streets = {u.stop_id: u.street for u in stop_file.unlocated}
+    for sequence, stop_id in enumerate(stop_file.order, start=1):
+        point = points.get(stop_id)
+        row = Stop(
+            org_id=upload.org_id,
+            upload_id=upload.id,
+            stop_id=stop_id,
+            current_sequence=sequence,
+            current_route_id=stop_file.route_of.get(stop_id),
+            location=None if point is None else _point(point.location),
+            street=point.street if point is not None else streets.get(stop_id),
+        )
+        db.add(_placed(row, placed[stop_id]))
     upload.state = UploadState.READY
 
 
-def _row(
-    upload: Upload,
-    sequence: int,
-    stop: StopPoint,
-    route_id: str | None,
-    placed: SnappedStop | ReviewItem,
-) -> Stop:
-    row = Stop(
-        org_id=upload.org_id,
-        upload_id=upload.id,
-        stop_id=stop.stop_id,
-        current_sequence=sequence,
-        current_route_id=route_id,
-        location=_point(stop.location),
-        street=stop.street,
-    )
+_UNPLACED = {
+    GeocodeQuality.NOT_FOUND: ReviewReason.ADDRESS_NOT_FOUND,
+    GeocodeQuality.AMBIGUOUS: ReviewReason.ADDRESS_AMBIGUOUS,
+}
+
+
+def _placed(row: Stop, placed: SnappedStop | ReviewItem) -> Stop:
     if isinstance(placed, SnappedStop):
         row.state = StopState.SNAPPED
         row.segment_id = placed.segment_id
@@ -153,8 +181,14 @@ def _row(
     return row
 
 
+def _location_of(row: Stop) -> LonLat:
+    """A snapped stop always has a location; only unplaced addresses lack one."""
+    assert row.location is not None, row.stop_id
+    return _lon_lat(row.location)
+
+
 def _stop_point(row: Stop) -> StopPoint:
-    return StopPoint(row.stop_id, _lon_lat(row.location), street=row.street)
+    return StopPoint(row.stop_id, _location_of(row), street=row.street)
 
 
 def _snapped(
@@ -228,7 +262,7 @@ async def _solve(db: AsyncSession, context: Context, run: Run) -> None:
     if not rows:
         raise ValueError("the upload has no snapped stops to solve")
     yard, disposal = _lon_lat(route.yard), _lon_lat(route.disposal)
-    bbox = bbox_around([*(_lon_lat(r.location) for r in rows), yard, disposal], NETWORK_MARGIN_M)
+    bbox = bbox_around([*(_location_of(r) for r in rows), yard, disposal], NETWORK_MARGIN_M)
     graph = await asyncio.to_thread(context.network, bbox)
     stops, missing = _snapped(graph, rows)
     sites = RouteSites(place_at(graph, "yard", yard), place_at(graph, "disposal", disposal))

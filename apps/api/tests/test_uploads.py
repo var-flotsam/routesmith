@@ -176,3 +176,36 @@ async def test_another_organizations_stops_cannot_be_placed_or_excluded(api):
         body = {"segment_id": item["candidate_segment_ids"][0], "curb_side": "left"}
         assert (await bob.put(f"{stop}/placement", json=body)).status_code == 404
         assert (await bob.put(f"{stop}/exclusion")).status_code == 404
+
+
+async def test_stops_given_by_address_are_geocoded_and_doubtful_ones_reviewed(api):
+    client, org, route = await _setup(api)
+    body = (
+        b"stop_id,current_sequence,address,city,state\n"
+        b"a,1,20 -10,Town,CT\n"  # found as written
+        b"b,2,maybe 60 -10,Town,CT\n"  # found after the geocoder changed the address
+        b"c,3,twice,Town,CT\n"  # more than one place fits
+        b"d,4,nowhere,Town,CT\n"  # not found
+    )
+    upload = (await _upload(client, org, route, body)).json()
+    assert await api.run_jobs() == ["ready"]
+    base = f"/orgs/{org}/uploads/{upload['id']}"
+    stops = {s["stop_id"]: s for s in (await client.get(f"{base}/stops")).json()}
+    assert stops["a"]["state"] == "snapped"
+    assert (stops["b"]["review_reason"], len(stops["b"]["candidate_segment_ids"])) == (
+        "address_inexact",
+        1,
+    )
+    assert stops["c"]["review_reason"] == "address_ambiguous"
+    assert stops["d"]["review_reason"] == "address_not_found"
+    # The planner confirms the inexact one and leaves the unplaced ones out.
+    b = stops["b"]
+    confirmed = await client.put(
+        f"{base}/stops/b/placement",
+        json={"segment_id": b["candidate_segment_ids"][0], "curb_side": "right"},
+    )
+    assert confirmed.status_code == 200
+    for stop_id in ("c", "d"):
+        assert (await client.put(f"{base}/stops/{stop_id}/exclusion")).status_code == 200
+    done = (await client.get(base)).json()
+    assert (done["stops_snapped"], done["stops_in_review"], done["stops_excluded"]) == (2, 0, 2)
