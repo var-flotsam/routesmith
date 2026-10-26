@@ -4,7 +4,7 @@ from fastapi import FastAPI
 
 from starboard.api.db import engine_for, session_maker
 from starboard.api.email import ConsoleEmailSender, EmailSender
-from starboard.api.routers import auth, orgs
+from starboard.api.routers import auth, orgs, routes
 from starboard.api.settings import Settings
 
 
@@ -25,4 +25,5 @@ def create_app(
 
     app.include_router(auth.router)
     app.include_router(orgs.router)
+    app.include_router(routes.router)
     return app
