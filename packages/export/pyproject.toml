@@ -4,7 +4,10 @@ version = "0.0.0"
 description = "Driver route sheet PDF, CSV and GPX/KML exports"
 requires-python = ">=3.12,<3.13"
 license = "FSL-1.1-ALv2"
-dependencies = ["starboard-solver"]
+dependencies = [
+    "reportlab>=4.2",
+    "starboard-solver",
+]
 
 [build-system]
 requires = ["hatchling>=1.25"]
