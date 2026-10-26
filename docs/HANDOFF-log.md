@@ -120,3 +120,42 @@
 **Blocked**
 
 - Nothing.
+
+## 2026-10-26 (phase 3, several routes)
+
+**Done**
+
+- #26 to #28: street units, the route objectives and bounds, the district
+  partition.
+- #29: `solve_routes`, the route-set checker (invariant 5), `--trucks N` and
+  `--objective`.
+- #30: the step that swaps street units between districts. Byram on 2 trucks
+  goes from 16,475 s to 16,361 s in total, with the longest route from
+  8,927 s to 8,671 s.
+- #31: an optional `route_id` column. Each truck's current route is driven on
+  its own and compared, as an area, with the optimized routes.
+- #32: local search resumes where it found its last move: 110 s to 14 s on a
+  600-stop grid.
+- #33: compact plan-cost tables and the scale benchmark at 1,000 stops per
+  truck (88 s, 12 min and 48 min for 1, 3 and 10 trucks).
+
+**Decisions**
+
+- At most 1,000 stops per truck per day (owner, 2026-10-26).
+- With a `route_id` column and no `--trucks`, the area is split among as many
+  trucks as there are current routes.
+- 2-opt* tail exchange is not used, since a tail cuts across street units
+  (ADR-0003).
+
+**Next**
+
+- Enforce the 1,000-stop limit in the solver; the owner is choosing how.
+- Splitting an area across several days is not planned yet; it is the
+  owner's call whether it comes next.
+- The two-vehicle re-solve and the giant-tour restart (ADR-0003 step 11).
+- Truck restrictions from OSM (`hgv=no`, `maxweight`).
+
+**Blocked**
+
+- Merging #29 to #33 needs the owner: the safety check on this machine
+  refuses merges.
