@@ -57,7 +57,8 @@ What a hauler wants to know:
 
 Time windows, commercial front-load or roll-off, live GPS tracking, mid-route
 dynamic re-sequencing, and, within an area split into several routes, trucks
-with different profiles or more than one yard or disposal site. Each is a
+with different profiles or more than one yard or disposal site, and splitting
+one area across several days (post-MVP, owner 2026-10-26). Each is a
 later product; do not design them in now. Splitting one area into a given
 number of routes is in scope, as `docs/adr/0003-multi-route.md` describes.
 
