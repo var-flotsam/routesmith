@@ -2,6 +2,9 @@
 
 import hashlib
 import secrets
+from typing import Annotated
+
+from pydantic import StringConstraints
 
 # 32 random bytes: 256 bits, beyond guessing for the life of a link or session.
 _TOKEN_BYTES = 32
@@ -18,3 +21,8 @@ def token_hash(token: str) -> str:
 
 def normalized_email(email: str) -> str:
     return email.strip().lower()
+
+
+# An address as the spec states it: something@somewhere, no spaces. Deliverability is
+# not judged here; a link to an address that does not exist is simply never opened.
+EmailAddress = Annotated[str, StringConstraints(max_length=320, pattern=r"^[^@\s]+@[^@\s]+$")]

@@ -6,18 +6,18 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Cookie, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from sqlalchemy import delete, select
 
 from starboard.api.deps import SESSION_COOKIE, SIGNED_IN, CurrentUser, Database, settings_of
 from starboard.api.models import LoginToken, Membership, Organization, Role, Session, User
-from starboard.api.security import new_token, normalized_email, token_hash
+from starboard.api.security import EmailAddress, new_token, normalized_email, token_hash
 
 router = APIRouter(tags=["auth"])
 
 
 class MagicLinkRequest(BaseModel):
-    email: EmailStr
+    email: EmailAddress
 
 
 class OrgMembership(BaseModel):
