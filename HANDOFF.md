@@ -199,8 +199,9 @@ Each phase ends with a PR, green CI, and a line in `docs/HANDOFF-log.md`.
 4. **API and worker.** Orgs, users, routes, uploads, runs, results; arq job;
    Compose stack; schemathesis against the OpenAPI spec.
 5. **Web v1.** Sign-in, route setup, upload with column mapping, review queue
-   on the map, run status, current-route map, stop table. **Deploy to a
-   public URL at the end of this phase**, demo route preloaded.
+   on the map, run status, current-route map, stop table, demo route
+   preloaded. It runs locally under Docker Compose; deploying to a public URL
+   waits until the owner wants one (owner, 2026-10-26).
 6. **Comparison view.** Optimized layer, split view, playback, scorecard
    deltas, permalinks, share links.
 7. **Exports.** PDF route sheet, CSV, GPX/KML.
@@ -288,9 +289,9 @@ Record each as an ADR in `docs/adr/` when decided.
 1. Licence: decided. The whole repository is under FSL-1.1-ALv2 (see
    `LICENSE.md`): source-available, no competing commercial use, each version
    becomes Apache-2.0 two years after release. Record as ADR-0001.
-2. Geocoder: self-hosted Nominatim (free, slower, you run it) vs. a paid API
-   (fast, per-call cost, terms restrict caching). Recommendation: Nominatim
-   for v1 with the interface in place.
+2. Geocoder: decided 2026-10-26. A free geocoder for now: the US Census batch
+   geocoder behind a `Geocoder` interface (ADR-0005). A paid or self-hosted
+   one can replace it later.
 3. Company formation, business bank account, and Stripe account need a legal
    entity. Do this before §5 "Money".
 4. Domain purchase and a trademark clearance search on "Starboard Routing" before launch.
