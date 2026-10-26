@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from starboard.api.deps import Database, member
+from starboard.api.deps import IN_ORG, Database, member
 from starboard.api.models import (
     Membership,
     Role,
@@ -25,7 +25,13 @@ from starboard.api.scoping import in_org, one_in_org, result_in_org
 from starboard.solver.fleet import trucks_for
 from starboard.solver.objectives import RouteObjective, check_objective
 
-router = APIRouter(tags=["runs"])
+router = APIRouter(
+    tags=["runs"],
+    responses={
+        **IN_ORG,
+        409: {"description": "the upload is not ready to solve, or the route does not allow it"},
+    },
+)
 
 Viewer = Annotated[Membership, Depends(member(Role.VIEWER))]
 Planner = Annotated[Membership, Depends(member(Role.PLANNER))]
@@ -116,7 +122,7 @@ async def start_run(
     try:
         check_objective(body.objective, max_s)
     except ValueError as error:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from None
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from None
     trucks = body.trucks
     if trucks is None:
         current_routes = await db.scalar(

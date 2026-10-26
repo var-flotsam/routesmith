@@ -7,11 +7,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select
 
-from starboard.api.deps import CurrentUser, Database, member
+from starboard.api.deps import IN_ORG, CurrentUser, Database, member
 from starboard.api.models import Membership, Organization, Role, User
 from starboard.api.security import normalized_email
 
-router = APIRouter(tags=["organizations"])
+router = APIRouter(
+    tags=["organizations"],
+    responses={**IN_ORG, 409: {"description": "an organization keeps one owner"}},
+)
 
 
 class NewOrganization(BaseModel):

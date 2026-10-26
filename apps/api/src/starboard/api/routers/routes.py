@@ -9,11 +9,11 @@ from geoalchemy2.shape import from_shape, to_shape
 from pydantic import BaseModel, Field
 from shapely.geometry import Point
 
-from starboard.api.deps import Database, member
+from starboard.api.deps import IN_ORG, Database, member
 from starboard.api.models import Membership, Role, Route
 from starboard.api.scoping import in_org, one_in_org
 
-router = APIRouter(tags=["routes"])
+router = APIRouter(tags=["routes"], responses=IN_ORG)
 
 Viewer = Annotated[Membership, Depends(member(Role.VIEWER))]
 Planner = Annotated[Membership, Depends(member(Role.PLANNER))]

@@ -90,7 +90,7 @@ async def test_the_total_objective_needs_a_maximum_route_time(api):
     client, org, route, upload = await _ready_upload(api)
     body = {"upload_id": upload, "objective": "total"}
     response = await client.post(f"/orgs/{org}/routes/{route}/runs", json=body)
-    assert response.status_code == 422
+    assert response.status_code == 409
 
 
 async def test_a_failed_solve_is_recorded_with_its_reason(api):

@@ -147,7 +147,7 @@ async def test_a_street_that_is_not_a_candidate_is_refused(api):
         f"{base}/stops/{item['stop_id']}/placement",
         json={"segment_id": "somewhere-else", "curb_side": "right"},
     )
-    assert response.status_code == 422
+    assert response.status_code == 409
 
 
 async def test_a_stop_that_snapped_on_its_own_is_not_placed_again(api):

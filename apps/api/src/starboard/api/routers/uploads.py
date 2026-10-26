@@ -8,13 +8,20 @@ from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, stat
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
-from starboard.api.deps import Database, member
+from starboard.api.deps import IN_ORG, Database, member
 from starboard.api.models import Membership, Role, Route, Stop, StopState, Upload, UploadState
 from starboard.api.queue import IMPORT_UPLOAD
 from starboard.api.scoping import in_org, one_in_org
 from starboard.solver.graph import CurbSide, Direction
 
-router = APIRouter(tags=["uploads"])
+router = APIRouter(
+    tags=["uploads"],
+    responses={
+        **IN_ORG,
+        409: {"description": "the stop or street does not allow this"},
+        413: {"description": "the file is too large"},
+    },
+)
 
 Viewer = Annotated[Membership, Depends(member(Role.VIEWER))]
 Planner = Annotated[Membership, Depends(member(Role.PLANNER))]
@@ -201,9 +208,7 @@ async def place_stop(
     if stop.review_reason is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "this stop snapped on its own")
     if body.segment_id not in stop.candidate_segment_ids:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT, "the street must be one of the candidates"
-        )
+        raise HTTPException(status.HTTP_409_CONFLICT, "the street must be one of the candidates")
     stop.state = StopState.SNAPPED
     stop.segment_id = body.segment_id
     stop.curb_side = body.curb_side.value
