@@ -14,6 +14,7 @@ from starboard.api.deps import IN_ORG, Database, member
 from starboard.api.models import Membership, Role, Route, Stop, StopState, Upload, UploadState
 from starboard.api.queue import IMPORT_UPLOAD
 from starboard.api.scoping import in_org, one_in_org
+from starboard.api.text import StopId
 from starboard.solver.graph import CurbSide, Direction
 
 router = APIRouter(
@@ -161,7 +162,8 @@ async def upload_stops(
         id=upload_id,
         org_id=org_id,
         route_id=route.id,
-        file_name=(file.filename or "stops.csv")[:255],
+        # Postgres cannot store NUL (see `starboard.api.text`); a file name keeps the rest.
+        file_name=(file.filename or "stops.csv").replace("\x00", "")[:255],
         object_key=key,
         state=UploadState.PROCESSING,
         rows_read=0,
@@ -215,7 +217,7 @@ async def list_stops(
 async def place_stop(
     org_id: uuid.UUID,
     upload_id: uuid.UUID,
-    stop_id: str,
+    stop_id: StopId,
     body: Placement,
     db: Database,
     _: Planner,
@@ -243,7 +245,7 @@ async def place_stop(
 
 @router.put("/orgs/{org_id}/uploads/{upload_id}/stops/{stop_id}/exclusion")
 async def exclude_stop(
-    org_id: uuid.UUID, upload_id: uuid.UUID, stop_id: str, db: Database, _: Planner
+    org_id: uuid.UUID, upload_id: uuid.UUID, stop_id: StopId, db: Database, _: Planner
 ) -> StopOut:
     """Leave a stop out of every run of this upload (a vacant lot, a cart picked up elsewhere)."""
     stop = await _stop(db, org_id, upload_id, stop_id)

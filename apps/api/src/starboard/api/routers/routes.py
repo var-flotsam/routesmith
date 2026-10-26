@@ -12,6 +12,7 @@ from shapely.geometry import Point
 from starboard.api.deps import IN_ORG, Database, member
 from starboard.api.models import Membership, Role, Route
 from starboard.api.scoping import in_org, one_in_org
+from starboard.api.text import Name
 
 router = APIRouter(tags=["routes"], responses=IN_ORG)
 
@@ -25,7 +26,7 @@ class Location(BaseModel):
 
 
 class RouteFields(BaseModel):
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     yard: Location
     disposal: Location
     capacity_carts: int | None = Field(default=None, ge=1, description="carts per load")
@@ -33,7 +34,7 @@ class RouteFields(BaseModel):
 
 
 class RouteChanges(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: Name | None = None
     yard: Location | None = None
     disposal: Location | None = None
     capacity_carts: int | None = Field(default=None, ge=1)
