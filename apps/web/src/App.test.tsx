@@ -1,42 +1,7 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
-import { vi } from "vitest";
 
-import { App } from "./App";
-
-type Answer = { status: number; body: unknown };
-
-/** Answers API calls by "METHOD /path", and records each request. */
-function fakeApi(answers: Record<string, Answer | Answer[]>) {
-  const calls: { key: string; body: unknown }[] = [];
-  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-    const request = input as Request;
-    const key = `${request.method} ${new URL(request.url).pathname.replace(/^\/api/, "")}`;
-    const text = await request.text();
-    calls.push({ key, body: text ? JSON.parse(text) : undefined });
-    const listed = answers[key];
-    const answer = Array.isArray(listed) ? (listed.shift() ?? listed[0]) : listed;
-    if (answer === undefined) throw new Error(`no fake answer for ${key}`);
-    return new Response(JSON.stringify(answer.body), {
-      status: answer.status,
-      headers: { "Content-Type": "application/json" },
-    });
-  });
-  return calls;
-}
-
-function renderApp() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <App />
-      </MemoryRouter>
-    </QueryClientProvider>,
-  );
-}
+import { fakeApi, renderApp } from "./test-helpers";
 
 const ME = { id: "u1", email: "planner@example.com", organizations: [] };
 

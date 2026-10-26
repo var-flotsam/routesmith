@@ -30,3 +30,18 @@ export function dataOf<T>(answer: { data?: T; error?: unknown; response: Respons
   const detail = (answer.error as { detail?: unknown } | undefined)?.detail;
   throw new ApiError(answer.response.status, detail);
 }
+
+/**
+ * POST a form with a file. openapi-fetch builds a `Request`, which some environments
+ * cannot build from a `FormData`, so files go through `fetch` directly.
+ */
+export async function postForm<T>(path: string, form: FormData): Promise<T> {
+  const response = await globalThis.fetch(`${window.location.origin}/api${path}`, {
+    method: "POST",
+    body: form,
+    credentials: "include",
+  });
+  const body: unknown = await response.json().catch(() => undefined);
+  if (!response.ok) throw new ApiError(response.status, (body as { detail?: unknown })?.detail);
+  return body as T;
+}
