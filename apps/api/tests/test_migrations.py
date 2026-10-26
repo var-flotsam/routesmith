@@ -1,7 +1,7 @@
 """Migrations against a real PostGIS database: up, no drift from the models, and down.
 
 Needs STARBOARD_TEST_DATABASE_URL (CI sets it for its PostGIS service); skipped otherwise.
-The database it names is emptied.
+The database it names is emptied, then migrated to head again.
 """
 
 import os
@@ -40,3 +40,5 @@ def test_migrations_build_the_model_tables_and_come_down_again():
     assert drift.returncode == 0, drift.stdout + drift.stderr
     down = _alembic("downgrade", "base")
     assert down.returncode == 0, down.stderr
+    again = _alembic("upgrade", "head")  # the other API tests expect the tables
+    assert again.returncode == 0, again.stderr
