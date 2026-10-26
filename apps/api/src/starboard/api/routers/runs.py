@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -163,11 +163,71 @@ async def read_run(org_id: uuid.UUID, run_id: uuid.UUID, db: Database, _: Viewer
     return _out(await one_in_org(db, Run, org_id, run_id))
 
 
+class ScorecardOut(BaseModel):
+    """The measures for one route or an area, as `starboard.solver.scorecard` computes them."""
+
+    distance_m: float
+    drive_time_s: float
+    service_time_s: float
+    wrong_side_time_s: float
+    unload_time_s: float
+    route_time_s: float
+    left_turns: int
+    right_turns: int
+    u_turns: int
+    wrong_side_pickups: int
+    dead_head_m: float
+    street_passes: int
+    stops_serviced: int
+    stops_unreachable: int
+    disposal_visits: int
+
+
+class CurrentRoute(BaseModel):
+    route_id: str | None  # None when the stop list names no routes
+    scorecard: ScorecardOut
+
+
+class OptimizedRoute(BaseModel):
+    scorecard: ScorecardOut
+    order: list[str]  # stop ids in the order collected
+
+
+class CurrentSide(BaseModel):
+    routes: list[CurrentRoute]
+    area: ScorecardOut
+
+
+class OptimizedSide(BaseModel):
+    routes: list[OptimizedRoute]
+    area: ScorecardOut
+
+
+class UnservedOut(BaseModel):
+    stop_id: str
+    reason: str
+
+
+class RunReport(BaseModel):
+    """Current against optimized for one run (`starboard.solver.comparison.compare`)."""
+
+    trucks: int
+    objective: RouteObjective
+    current: CurrentSide
+    optimized: OptimizedSide
+    total_route_time_s: float
+    longest_route_time_s: float
+    total_lower_bound_s: float
+    gap: float
+    balance_met: bool
+    unserved: list[UnservedOut]
+    time_limited: bool
+    osm_snapshot: str | None = None
+
+
 @router.get("/orgs/{org_id}/runs/{run_id}/result")
-async def read_result(
-    org_id: uuid.UUID, run_id: uuid.UUID, db: Database, _: Viewer
-) -> dict[str, Any]:
+async def read_result(org_id: uuid.UUID, run_id: uuid.UUID, db: Database, _: Viewer) -> RunReport:
     """The run's report: current and optimized scorecards, orders, bound, gap and unserved
     stops, as the solver computed them. 404 until the run has succeeded."""
     await one_in_org(db, Run, org_id, run_id)
-    return (await result_in_org(db, org_id, run_id)).result
+    return RunReport.model_validate((await result_in_org(db, org_id, run_id)).result)
