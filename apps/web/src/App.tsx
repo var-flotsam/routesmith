@@ -7,6 +7,7 @@ import { OrgPage } from "./pages/OrgPage";
 import { ReviewPage } from "./pages/ReviewPage";
 import { RoutePage } from "./pages/RoutePage";
 import { RunPage } from "./pages/RunPage";
+import { SharedPage } from "./pages/SharedPage";
 import { SignIn } from "./pages/SignIn";
 
 /** Who is signed in; a 401 means nobody, which is not an error. */
@@ -25,6 +26,16 @@ export function useMe() {
 }
 
 export function App() {
+  // A shared result is for people outside the organization: no sign-in.
+  return (
+    <Routes>
+      <Route path="/shared/:token" element={<SharedPage />} />
+      <Route path="*" element={<SignedInApp />} />
+    </Routes>
+  );
+}
+
+function SignedInApp() {
   const me = useMe();
   if (me.isPending) return <p className="status">Loading…</p>;
   if (me.isError) return <p className="status error">{me.error.message}</p>;

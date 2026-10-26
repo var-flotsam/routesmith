@@ -115,6 +115,8 @@ const REPORT = {
   osm_snapshot: "2026-10-01",
 };
 
+const NOT_SHARED = { shared: false, created_at: null };
+
 test("a cleared stop list is solved from the route page", async () => {
   const calls = fakeApi({
     "GET /me": { status: 200, body: ME },
@@ -158,6 +160,7 @@ test("a finished run shows current against optimized for the area", async () => 
     "GET /me": { status: 200, body: ME },
     "GET /orgs/o1/runs/run1": { status: 200, body: RUN },
     "GET /orgs/o1/runs/run1/result": { status: 200, body: REPORT },
+    "GET /orgs/o1/runs/run1/share-link": { status: 200, body: NOT_SHARED },
   });
   renderApp("/orgs/o1/runs/run1");
   const routeTime = (await screen.findByRole("rowheader", { name: "Route time" })).closest("tr");
@@ -208,6 +211,7 @@ test("the stop table lists each stop's current and optimized place, moved most f
     "GET /me": { status: 200, body: ME },
     "GET /orgs/o1/runs/run1": { status: 200, body: { ...RUN, trucks: 1 } },
     "GET /orgs/o1/runs/run1/result": { status: 200, body: oneTruck },
+    "GET /orgs/o1/runs/run1/share-link": { status: 200, body: NOT_SHARED },
     "GET /orgs/o1/uploads/up1/stops": {
       status: 200,
       body: [stop("s1", 1), stop("s2", 2), stop("s3", 3)],
@@ -230,6 +234,7 @@ test("the run map shows both route sets, and each can be hidden", async () => {
     "GET /me": { status: 200, body: ME },
     "GET /orgs/o1/runs/run1": { status: 200, body: RUN },
     "GET /orgs/o1/runs/run1/result": { status: 200, body: REPORT },
+    "GET /orgs/o1/runs/run1/share-link": { status: 200, body: NOT_SHARED },
     "GET /orgs/o1/uploads/up1/stops": { status: 200, body: [] },
   });
   renderApp("/orgs/o1/runs/run1");
@@ -245,6 +250,7 @@ test("the routes can be shown side by side", async () => {
     "GET /me": { status: 200, body: ME },
     "GET /orgs/o1/runs/run1": { status: 200, body: RUN },
     "GET /orgs/o1/runs/run1/result": { status: 200, body: REPORT },
+    "GET /orgs/o1/runs/run1/share-link": { status: 200, body: NOT_SHARED },
     "GET /orgs/o1/uploads/up1/stops": { status: 200, body: [] },
   });
   renderApp("/orgs/o1/runs/run1");
@@ -258,6 +264,7 @@ test("playback moves every truck on one clock, and shorter routes finish first",
     "GET /me": { status: 200, body: ME },
     "GET /orgs/o1/runs/run1": { status: 200, body: RUN },
     "GET /orgs/o1/runs/run1/result": { status: 200, body: REPORT },
+    "GET /orgs/o1/runs/run1/share-link": { status: 200, body: NOT_SHARED },
     "GET /orgs/o1/uploads/up1/stops": { status: 200, body: [] },
   });
   renderApp("/orgs/o1/runs/run1");
@@ -268,4 +275,52 @@ test("playback moves every truck on one clock, and shorter routes finish first",
   expect(screen.getByText(/Current: 0 of 1 done. Optimized: 2 of 2 done./)).toBeInTheDocument();
   // The current truck is a third of the way along; the first optimized truck is home.
   expect(screen.getByText(/trucks at/).textContent).toContain('"optimized":[[1,1],null]');
+});
+
+test("a planner makes a read-only link and can stop sharing", async () => {
+  const calls = fakeApi({
+    "GET /me": { status: 200, body: ME },
+    "GET /orgs/o1/runs/run1": { status: 200, body: RUN },
+    "GET /orgs/o1/runs/run1/result": { status: 200, body: REPORT },
+    "GET /orgs/o1/uploads/up1/stops": { status: 200, body: [] },
+    "GET /orgs/o1/runs/run1/share-link": [
+      { status: 200, body: NOT_SHARED },
+      { status: 200, body: { shared: true, created_at: "2026-10-26T13:00:00Z" } },
+      { status: 200, body: NOT_SHARED },
+    ],
+    "PUT /orgs/o1/runs/run1/share-link": {
+      status: 200,
+      body: { url: "http://localhost:5173/shared/abc", created_at: "2026-10-26T13:00:00Z" },
+    },
+    "DELETE /orgs/o1/runs/run1/share-link": { status: 204, body: null },
+  });
+  renderApp("/orgs/o1/runs/run1");
+  await userEvent.click(await screen.findByRole("button", { name: "Share a read-only link" }));
+  expect(await screen.findByRole("textbox", { name: "Share link" })).toHaveValue(
+    "http://localhost:5173/shared/abc",
+  );
+  await userEvent.click(await screen.findByRole("button", { name: "Stop sharing" }));
+  await waitFor(() =>
+    expect(calls.some((c) => c.key === "DELETE /orgs/o1/runs/run1/share-link")).toBe(true),
+  );
+  expect(await screen.findByRole("button", { name: "Share a read-only link" })).toBeInTheDocument();
+});
+
+test("a shared result opens without signing in", async () => {
+  const calls = fakeApi({
+    "GET /shared/abc": {
+      status: 200,
+      body: { route_name: "Byram", finished_at: "2026-10-26T12:00:30Z", report: REPORT },
+    },
+  });
+  renderApp("/shared/abc");
+  expect(await screen.findByRole("heading", { name: "Byram" })).toBeInTheDocument();
+  expect(screen.getByRole("rowheader", { name: "Route time" })).toBeInTheDocument();
+  expect(calls.map((c) => c.key)).not.toContain("GET /me");
+});
+
+test("a link that was taken away says so", async () => {
+  fakeApi({ "GET /shared/gone": { status: 404, body: { detail: "no such link" } } });
+  renderApp("/shared/gone");
+  expect(await screen.findByText(/This link does not work/)).toBeInTheDocument();
 });
