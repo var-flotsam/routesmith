@@ -28,6 +28,7 @@ dependencies are out).
 uv sync --all-packages                 # Python deps
 pnpm install                           # web deps
 docker compose up -d db redis          # local Postgres/PostGIS and Redis
+docker compose up --build              # the whole stack: API on :8000 and the worker
 uv run alembic upgrade head            # migrations
 uv run pytest                          # all Python tests
 uv run pytest packages/solver -m property   # solver property tests only

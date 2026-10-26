@@ -78,3 +78,22 @@ jobs:
         env:
           BANNED_TERMS_FILE: ${{ runner.temp }}/banned-terms.txt
         run: sh scripts/check-banned-terms.sh --range "${{ github.event.before }}..${{ github.sha }}"
+
+  stack:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start the Compose stack
+        run: docker compose up -d --build api worker
+      - name: The API answers and the worker is running
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/healthz; then break; fi
+            sleep 2
+          done
+          curl -fsS http://localhost:8000/healthz
+          test "$(docker compose ps --status running --services | grep -c '^worker$')" = 1
+          test "$(docker compose ps -a --format '{{.Service}} {{.ExitCode}}' | grep '^migrate ')" = "migrate 0"
+      - name: Logs
+        if: always()
+        run: docker compose logs --no-color
