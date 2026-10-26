@@ -22,7 +22,9 @@ def test_an_address_or_a_name_with_a_control_character_is_refused(control):
 
 def test_ordinary_addresses_and_names_still_pass():
     assert MagicLinkRequest(email="planner@example.com").email == "planner@example.com"
-    assert NewOrganization(name="Kāneʻohe Hauling & Sons").name == "Kāneʻohe Hauling & Sons"
+    # U+02BB is the Hawaiian okina, escaped because it looks like a quote mark.
+    name = "K\u0101ne\u02bbohe Hauling & Sons"
+    assert NewOrganization(name=name).name == name
 
 
 @pytest.mark.anyio
