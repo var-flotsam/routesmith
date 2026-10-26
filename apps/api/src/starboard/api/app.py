@@ -10,7 +10,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starboard.api.db import engine_for, session_maker
 from starboard.api.email import ConsoleEmailSender, EmailSender
 from starboard.api.queue import ArqQueue, JobQueue
-from starboard.api.routers import auth, orgs, routes, runs, shares, uploads
+from starboard.api.routers import auth, exports, orgs, routes, runs, shares, uploads
 from starboard.api.settings import Settings
 from starboard.api.storage import LocalObjectStore, ObjectStore
 
@@ -66,7 +66,7 @@ def create_app(
             headers={"Allow": ", ".join(methods)},
         )
 
-    routers = (auth, orgs, routes, uploads, runs, shares)
+    routers = (auth, orgs, routes, uploads, runs, shares, exports)
     for module in routers:
         app.include_router(module.router)
     return app

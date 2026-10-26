@@ -254,6 +254,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/orgs/{org_id}/runs/{run_id}/exports/{file}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Export
+         * @description One of the run's exports, as a download. 404 until the run has succeeded.
+         */
+        get: operations["download_export_orgs__org_id__runs__run_id__exports__file__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/orgs/{org_id}/runs/{run_id}/result": {
         parameters: {
             query?: never;
@@ -450,6 +470,11 @@ export interface components {
             /** Routes */
             routes: components["schemas"]["CurrentRoute"][];
         };
+        /**
+         * ExportFile
+         * @enum {string}
+         */
+        ExportFile: "route-sheet.pdf" | "stops.csv" | "routes.gpx" | "routes.kml";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1953,6 +1978,72 @@ export interface operations {
             };
             /** @description the upload is not ready to solve, or the route does not allow it */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_export_orgs__org_id__runs__run_id__exports__file__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+                run_id: string;
+                file: components["schemas"]["ExportFile"];
+            };
+            cookie?: {
+                starboard_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the file, to save: a PDF route sheet, a CSV of stops, GPX or KML */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/gpx+xml": string;
+                    "application/pdf": string;
+                    "application/vnd.google-earth.kml+xml": string;
+                    "text/csv": string;
+                };
+            };
+            /** @description the request body could not be read */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description the caller's role is too low for this */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description no such organization for the caller, or no such row in it */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
