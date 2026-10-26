@@ -9,7 +9,7 @@ gets 403.
 import uuid
 from collections.abc import AsyncIterator, Callable, Coroutine
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Cookie, Depends, HTTPException, Request, status
 from sqlalchemy import select
@@ -83,3 +83,12 @@ def member(
         return await membership(db, user, org_id, at_least)
 
     return check
+
+
+# Documented on every route, so the OpenAPI spec lists the answers clients can get.
+SIGNED_IN: dict[int | str, dict[str, Any]] = {401: {"description": "not signed in"}}
+IN_ORG: dict[int | str, dict[str, Any]] = {
+    **SIGNED_IN,
+    403: {"description": "the caller's role is too low for this"},
+    404: {"description": "no such organization for the caller, or no such row in it"},
+}

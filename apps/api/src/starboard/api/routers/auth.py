@@ -6,18 +6,18 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Cookie, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from sqlalchemy import delete, select
 
-from starboard.api.deps import SESSION_COOKIE, CurrentUser, Database, settings_of
+from starboard.api.deps import SESSION_COOKIE, SIGNED_IN, CurrentUser, Database, settings_of
 from starboard.api.models import LoginToken, Membership, Organization, Role, Session, User
-from starboard.api.security import new_token, normalized_email, token_hash
+from starboard.api.security import EmailAddress, new_token, normalized_email, token_hash
 
 router = APIRouter(tags=["auth"])
 
 
 class MagicLinkRequest(BaseModel):
-    email: EmailStr
+    email: EmailAddress
 
 
 class OrgMembership(BaseModel):
@@ -45,7 +45,11 @@ async def send_magic_link(body: MagicLinkRequest, request: Request, db: Database
     await request.app.state.email_sender.send_sign_in_link(email, link)
 
 
-@router.get("/auth/callback", status_code=status.HTTP_303_SEE_OTHER)
+@router.get(
+    "/auth/callback",
+    status_code=status.HTTP_303_SEE_OTHER,
+    responses={400: {"description": "the link has expired or was used"}},
+)
 async def sign_in(token: str, request: Request, db: Database) -> RedirectResponse:
     """Use a sign-in link: start a session and go to the app. A link works once."""
     settings = settings_of(request)
@@ -90,7 +94,7 @@ async def sign_out(
     response.delete_cookie(SESSION_COOKIE)
 
 
-@router.get("/me")
+@router.get("/me", responses=SIGNED_IN)
 async def me(user: CurrentUser, db: Database) -> Me:
     rows = await db.execute(
         select(Membership, Organization)
