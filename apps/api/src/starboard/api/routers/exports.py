@@ -1,15 +1,16 @@
 """Exports of one run: the driver route sheet, stops in the new order, and route paths.
 
-Each file is made when it is asked for, from the run's stored result and its upload's
-stops, and is not kept (ADR-0006): the same run gives the same bytes every time. Only
-members of the run's organization can download them; a share link does not reach them.
+Each file is made when it is asked for, from the run's stored result, its upload's stops
+and its route's name as it is now, and is not kept (ADR-0006): the same run under the
+same route name gives the same bytes every time. Only members of the run's organization
+can download them; a share link does not reach them.
 """
 
 import re
 import uuid
 from collections.abc import Callable, Iterable
 from enum import StrEnum
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response
 from geoalchemy2.shape import to_shape
@@ -52,7 +53,7 @@ MEDIA_TYPES = {
     ExportFile.ROUTES_KML: "application/vnd.google-earth.kml+xml",
 }
 
-_BINARY: dict[str, Any] = {"schema": {"type": "string", "format": "binary"}}
+_BINARY: dict[str, dict[str, str]] = {"schema": {"type": "string", "format": "binary"}}
 
 
 def run_export(route_name: str, report: RunReport, stops: Iterable[StopInfo]) -> RunExport:

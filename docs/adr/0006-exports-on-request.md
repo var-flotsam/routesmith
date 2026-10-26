@@ -8,8 +8,8 @@ A run's exports are the driver route sheet (PDF), the stops in the new order
 (CSV), and each route's path (GPX and KML) (HANDOFF §2.1, step 6). HANDOFF §3
 lists S3-compatible object storage for "uploads and PDF exports". The exports
 are deterministic: the same run gives byte-identical files (CLAUDE.md), and
-everything they are made from is already stored, in the run's result and its
-upload's stops. Laying out a route sheet for a 1,000-stop route takes well under
+everything they are made from is already stored, in the run's result, its
+upload's stops and its route's name. Laying out a route sheet for a 1,000-stop route takes well under
 a second.
 
 ## Decision
@@ -30,4 +30,7 @@ exports, because they carry stop locations the shared result does not show.
   they never change.
 - A change to an export's layout changes the file a past run gives. The
   snapshot tests in `packages/export` make every such change deliberate.
+- The files carry the route's name as it is now, as the run page and share
+  links do, so renaming a route renames past runs' files and their titles.
+  Everything else in them comes from the run alone.
 - Object storage is used for uploads only.
