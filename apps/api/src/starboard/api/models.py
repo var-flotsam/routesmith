@@ -192,3 +192,17 @@ class RunResult(Base):
     org_id: Mapped[uuid.UUID] = _org()
     # The solver output, ready for JSON: scorecards, orders, unserved stops, bound and gap.
     result: Mapped[dict[str, Any]] = mapped_column(JSONB)
+
+
+class ShareLink(Base):
+    """A read-only link to one run's result, for someone outside the organization.
+
+    Only the hash of the link's token is stored; the link is shown once, when made.
+    """
+
+    __tablename__ = "share_links"
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)  # SHA-256, hex
+    org_id: Mapped[uuid.UUID] = _org()
+    run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), index=True)
+    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = _created()
