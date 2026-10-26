@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from starboard.api.db import engine_for, session_maker
 from starboard.api.email import ConsoleEmailSender, EmailSender
 from starboard.api.queue import ArqQueue, JobQueue
-from starboard.api.routers import auth, orgs, routes, uploads
+from starboard.api.routers import auth, orgs, routes, runs, uploads
 from starboard.api.settings import Settings
 from starboard.api.storage import LocalObjectStore, ObjectStore
 
@@ -30,6 +30,6 @@ def create_app(
         """Liveness: the process answers. It does not touch the database."""
         return {"status": "ok"}
 
-    for router in (auth.router, orgs.router, routes.router, uploads.router):
+    for router in (auth.router, orgs.router, routes.router, uploads.router, runs.router):
         app.include_router(router)
     return app
