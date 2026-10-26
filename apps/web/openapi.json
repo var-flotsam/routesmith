@@ -74,6 +74,23 @@
       },
       "CurrentRoute": {
         "properties": {
+          "path": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Path",
+            "type": "array"
+          },
           "route_id": {
             "anyOf": [
               {
@@ -91,7 +108,8 @@
         },
         "required": [
           "route_id",
-          "scorecard"
+          "scorecard",
+          "path"
         ],
         "title": "CurrentRoute",
         "type": "object"
@@ -291,13 +309,31 @@
             "title": "Order",
             "type": "array"
           },
+          "path": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Path",
+            "type": "array"
+          },
           "scorecard": {
             "$ref": "#/components/schemas/ScorecardOut"
           }
         },
         "required": [
           "scorecard",
-          "order"
+          "order",
+          "path"
         ],
         "title": "OptimizedRoute",
         "type": "object"
