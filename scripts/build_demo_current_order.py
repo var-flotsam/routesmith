@@ -19,10 +19,10 @@ from collections import Counter, defaultdict
 from dataclasses import replace
 from pathlib import Path
 
-from starboard.cli.stop_file import read_stop_file
 from starboard.geo.osm import bbox_around, fetch_network
 from starboard.geo.places import place_at
 from starboard.geo.snapping import snap_stops
+from starboard.geo.stop_file import read_stop_file
 from starboard.solver.graph import LonLat, Pass
 from starboard.solver.optimize import SolveSettings, optimize
 from starboard.solver.route import RouteSites, TruckProfile

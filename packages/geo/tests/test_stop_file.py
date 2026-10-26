@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from starboard.cli.stop_file import read_stop_file
+from starboard.geo.stop_file import read_stop_file, read_stop_rows
 
 
 def write(tmp_path: Path, text: str) -> Path:
@@ -70,3 +70,9 @@ def test_a_route_id_column_names_each_stops_route(tmp_path):
 def test_without_a_route_id_column_no_routes_are_named(tmp_path):
     path = write(tmp_path, "stop_id,current_sequence,lon,lat\na,1,-73.0,41.0\n")
     assert read_stop_file(path).route_of == {}
+
+
+def test_rows_read_from_text_lines_match_a_file(tmp_path):
+    text = "stop_id,current_sequence,lon,lat\nb,2,-73.0,41.0\na,1,-73.1,41.1\n"
+    from_text = read_stop_rows(text.splitlines(keepends=True))
+    assert from_text == read_stop_file(write(tmp_path, text))
