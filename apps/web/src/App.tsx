@@ -3,6 +3,8 @@ import { Route, Routes } from "react-router";
 
 import { api, ApiError, dataOf } from "./api/client";
 import { Organizations } from "./pages/Organizations";
+import { OrgPage } from "./pages/OrgPage";
+import { RoutePage } from "./pages/RoutePage";
 import { SignIn } from "./pages/SignIn";
 
 /** Who is signed in; a 401 means nobody, which is not an error. */
@@ -33,6 +35,8 @@ export function App() {
       </header>
       <main>
         <Routes>
+          <Route path="/orgs/:orgId" element={<OrgPage />} />
+          <Route path="/orgs/:orgId/routes/:routeId" element={<RoutePage />} />
           <Route path="*" element={<Organizations me={me.data} />} />
         </Routes>
       </main>

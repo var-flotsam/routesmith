@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router";
 
 import { api, dataOf, type Schemas } from "../api/client";
 
@@ -30,7 +31,8 @@ export function Organizations({ me }: { me: Schemas["Me"] }) {
         <ul>
           {me.organizations.map((org) => (
             <li key={org.org_id}>
-              {org.name} <span className="muted">({org.role})</span>
+              <Link to={`/orgs/${org.org_id}`}>{org.name}</Link>{" "}
+              <span className="muted">({org.role})</span>
             </li>
           ))}
         </ul>
