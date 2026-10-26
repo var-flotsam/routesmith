@@ -388,6 +388,11 @@ export interface components {
         CurbSide: "left" | "right";
         /** CurrentRoute */
         CurrentRoute: {
+            /** Path */
+            path: [
+                number,
+                number
+            ][];
             /** Route Id */
             route_id: string | null;
             scorecard: components["schemas"]["ScorecardOut"];
@@ -468,6 +473,11 @@ export interface components {
         OptimizedRoute: {
             /** Order */
             order: string[];
+            /** Path */
+            path: [
+                number,
+                number
+            ][];
             scorecard: components["schemas"]["ScorecardOut"];
         };
         /** OptimizedSide */

@@ -186,11 +186,13 @@ class ScorecardOut(BaseModel):
 class CurrentRoute(BaseModel):
     route_id: str | None  # None when the stop list names no routes
     scorecard: ScorecardOut
+    path: list[tuple[float, float]]  # [lon, lat] points in driving order
 
 
 class OptimizedRoute(BaseModel):
     scorecard: ScorecardOut
     order: list[str]  # stop ids in the order collected
+    path: list[tuple[float, float]]  # [lon, lat] points in driving order
 
 
 class CurrentSide(BaseModel):
