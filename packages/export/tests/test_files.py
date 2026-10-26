@@ -13,7 +13,7 @@ import pytest
 from pypdf import PdfReader
 
 from starboard.export.files import routes_gpx, routes_kml, stops_csv
-from starboard.export.model import Step
+from starboard.export.model import RunExport, Step
 from starboard.export.route_sheet import distance, duration, instruction, route_sheet_pdf
 
 SNAPSHOTS = Path(__file__).parent / "snapshots"
@@ -87,16 +87,44 @@ def test_street_names_print_as_named_even_with_markup_characters():
     assert "Turn left onto Ole's <Lane>" in pages[1]
 
 
-def test_every_page_names_the_route_its_truck_and_its_number():
+def _with_second_route(**changes) -> RunExport:
     run = _sample()
-    long_route = dataclasses.replace(
-        run.routes[1], steps=tuple(Step("right", f"Street {k}", 50.0, ()) for k in range(150))
+    return dataclasses.replace(
+        run, routes=(run.routes[0], dataclasses.replace(run.routes[1], **changes))
     )
-    pages = _pages(route_sheet_pdf(dataclasses.replace(run, routes=(run.routes[0], long_route))))
+
+
+def test_every_page_names_the_route_its_truck_and_its_number():
+    steps = tuple(Step("right", f"Street {k}", 50.0, ()) for k in range(150))
+    pages = _pages(route_sheet_pdf(_with_second_route(steps=steps)))
     assert len(pages) > 2
-    assert "Byram & Mill, truck 1 of 2, page 1" in pages[0]
+    assert "Byram & Mill" in pages[0] and "Truck 1 of 2, page 1" in pages[0]
     for number, text in enumerate(pages[1:], start=2):
-        assert f"Byram & Mill, truck 2 of 2, page {number}" in text
+        assert "Byram & Mill" in text and f"Truck 2 of 2, page {number}" in text
+
+
+def test_a_page_the_steps_run_on_to_says_whose_it_is():
+    steps = tuple(Step("right", f"Street {k}", 50.0, ()) for k in range(150))
+    pages = _pages(route_sheet_pdf(_with_second_route(steps=steps)))
+    assert "continued" not in pages[0] + pages[1]
+    assert all("Truck 2 of 2, continued" in text for text in pages[2:])
+
+
+def test_a_long_route_name_leaves_the_truck_and_page_on_the_page():
+    run = dataclasses.replace(_sample(), route_name="North " * 40)
+    footer = _pages(route_sheet_pdf(run))[0].splitlines()[-2:]
+    assert footer[0].startswith("North North") and footer[0].endswith("…")
+    assert footer[1] == "Truck 1 of 2, page 1"
+
+
+def test_long_stop_ids_print_shortened_and_never_stop_the_sheet():
+    stop_ids = tuple(f"{k:02d}" + "W" * 98 for k in range(12))
+    pages = _pages(
+        route_sheet_pdf(_with_second_route(steps=(Step("depart", "Mill St", 9.0, stop_ids),)))
+    )
+    text = "".join(pages).replace("\n", "")  # a long id wraps inside its cell
+    assert "00" + "W" * 21 + "…" in text
+    assert "W" * 22 not in text
 
 
 @pytest.mark.parametrize(
