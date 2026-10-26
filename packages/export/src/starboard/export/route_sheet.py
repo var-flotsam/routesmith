@@ -12,11 +12,19 @@ leaves out creation dates and random ids, so one run always gives the same bytes
 from the run goes into ReportLab's paragraph markup escaped, so a street named with `<`
 or `&` prints as named. A table row may split across pages, so no step is too long to
 print.
+
+The sheet is set in DejaVu Sans (https://dejavu-fonts.github.io/), kept in `fonts/`
+under its own licence, and embedded in the PDF as a subset of the letters it uses. PDF
+viewers' built-in fonts stop at Western European letters; DejaVu Sans also covers the
+rest of the Latin alphabets, Greek and Cyrillic, so Kalākaua Ave and Łódź Rd print as
+named. A letter it lacks prints as an empty box, and the sheet still prints.
 """
 
 import io
 import math
 from dataclasses import dataclass, field
+from functools import cache
+from pathlib import Path
 from xml.sax.saxutils import escape
 
 from reportlab.graphics import renderPDF
@@ -25,7 +33,8 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
-from reportlab.pdfbase.pdfmetrics import stringWidth
+from reportlab.pdfbase.pdfmetrics import registerFont, stringWidth
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import (
     BaseDocTemplate,
@@ -54,12 +63,15 @@ _THUMBNAIL_BAND = _THUMBNAIL_SIZE + 0.2 * inch
 _PATH_COLOUR = colors.HexColor("#2563eb")
 _START_RADIUS = 4  # points; the yard, where the path starts and ends
 # The steps table: step number, instruction, distance, carts; together the frame's width.
-_COLUMN_WIDTHS = (0.5 * inch, 3.0 * inch, 1.0 * inch, 2.8 * inch)
+# The first is wide enough for a four-digit step number and the third for its heading,
+# with the cell padding either side.
+_COLUMN_WIDTHS = (0.65 * inch, 2.75 * inch, 1.1 * inch, 2.8 * inch)
 # Long cart lists are cut on the sheet, and so are long stop ids; the CSV has them all.
 _CARTS_SHOWN = 12
 _STOP_ID_CHARACTERS_SHOWN = 24
 
-_FONT, _BOLD_FONT = "Helvetica", "Helvetica-Bold"
+_FONTS = Path(__file__).parent / "fonts"
+_FONT, _BOLD_FONT = "DejaVuSans", "DejaVuSans-Bold"  # named as their files in `fonts/`
 _SAMPLE_STYLES = getSampleStyleSheet()
 _TITLE = ParagraphStyle("title", parent=_SAMPLE_STYLES["Title"], fontName=_BOLD_FONT)
 # 13 point: larger than a document's usual 10, for reading at arm's length in a cab.
@@ -70,6 +82,13 @@ _NOTE = ParagraphStyle(
     "note", parent=_SAMPLE_STYLES["Normal"], fontName=_FONT, fontSize=11, leading=14
 )
 _FOOTER_SIZE = 9
+
+
+@cache
+def _register_fonts() -> None:
+    """Tell ReportLab where the sheet's fonts are, once, on the first sheet printed."""
+    for name in (_FONT, _BOLD_FONT):
+        registerFont(TTFont(name, str(_FONTS / f"{name}.ttf")))
 
 
 def instruction(step: Step) -> str:
@@ -128,7 +147,8 @@ def _text(text: str, style: ParagraphStyle) -> Paragraph:
 
 def _path_drawing(route: TruckRoute, size: float) -> Drawing:
     """The route's path, north up, scaled to fit a square and centred, its start marked."""
-    drawing = Drawing(size, size)
+    # The drawing holds no text, but ReportLab names a font for it all the same.
+    drawing = Drawing(size, size, initialFontName=_FONT)
     frame = Rect(0, 0, size, size)
     frame.strokeColor, frame.fillColor = colors.lightgrey, None
     drawing.add(frame)
@@ -235,6 +255,7 @@ def _steps_table(route: TruckRoute) -> Table:
 
 def route_sheet_pdf(run: RunExport) -> bytes:
     """One section per truck, each starting on a new page, as US Letter."""
+    _register_fonts()
     pages = _Pages(run.route_name, run.routes)
     story: list[Flowable] = []
     for number, route in enumerate(run.routes, start=1):
@@ -276,6 +297,8 @@ def route_sheet_pdf(run: RunExport) -> bytes:
         title=f"{run.route_name} route sheet",
         author="Starboard Routing",
         invariant=True,
+        # ReportLab's canvas otherwise names Helvetica on every page, used or not.
+        initialFontName=_FONT,
     )
     document.build(story)
     return buffer.getvalue()

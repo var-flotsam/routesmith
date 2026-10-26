@@ -21,3 +21,6 @@ available. The copyright holder is "var-flotsam".
 - Dependencies must be compatible: GPL and AGPL libraries are not linked into
   the product. Services run alongside it over a network (such as a
   self-hosted Nominatim) are not dependencies in this sense.
+- The route sheet's fonts, in `packages/export/src/starboard/export/fonts/`,
+  are not under it: they are DejaVu Sans, unmodified, under the Bitstream Vera
+  and Arev font licences in that folder's `LICENSE` (ADR-0008, 2026-10-26).
