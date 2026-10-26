@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { vi } from "vitest";
@@ -12,10 +12,14 @@ vi.mock("../map/RouteMap", () => ({
     optimized: unknown[];
     shown: Set<string>;
     view: string;
+    trucks?: { current: unknown[]; optimized: unknown[] };
   }) => (
     <div>
-      {props.view} map of {props.current.length} current and {props.optimized.length} optimized
-      routes, showing {[...props.shown].sort().join(" and ")}
+      <p>
+        {props.view} map of {props.current.length} current and {props.optimized.length}{" "}
+        optimized routes, showing {[...props.shown].sort().join(" and ")}
+      </p>
+      <p>trucks at {JSON.stringify(props.trucks ?? null)}</p>
     </div>
   ),
 }));
@@ -89,7 +93,14 @@ const REPORT = {
   },
   optimized: {
     routes: [
-      { scorecard: card(8671, 19733, 2), order: ["s1", "s2"], path: [] },
+      {
+        scorecard: card(8671, 19733, 2),
+        order: ["s1", "s2"],
+        path: [
+          [1, 0],
+          [1, 1],
+        ],
+      },
       { scorecard: card(7691, 17413, 2), order: ["s3", "s4"], path: [] },
     ],
     area: card(16362, 37146, 4),
@@ -189,7 +200,7 @@ test("the stop table lists each stop's current and optimized place, moved most f
     ...REPORT,
     trucks: 1,
     optimized: {
-      routes: [{ scorecard: card(16362, 37146, 3), order: ["s3", "s1", "s2"] }],
+      routes: [{ scorecard: card(16362, 37146, 3), order: ["s3", "s1", "s2"], path: [] }],
       area: card(16362, 37146, 3),
     },
   };
@@ -240,4 +251,21 @@ test("the routes can be shown side by side", async () => {
   await userEvent.click(await screen.findByRole("radio", { name: "Side by side" }));
   expect(await screen.findByText(/^split map/)).toBeInTheDocument();
   expect(screen.getByRole("checkbox", { name: /Current/ })).toBeDisabled();
+});
+
+test("playback moves every truck on one clock, and shorter routes finish first", async () => {
+  fakeApi({
+    "GET /me": { status: 200, body: ME },
+    "GET /orgs/o1/runs/run1": { status: 200, body: RUN },
+    "GET /orgs/o1/runs/run1/result": { status: 200, body: REPORT },
+    "GET /orgs/o1/uploads/up1/stops": { status: 200, body: [] },
+  });
+  renderApp("/orgs/o1/runs/run1");
+  const slider = await screen.findByRole("slider", { name: "Time into the day" });
+  expect(slider).toHaveAttribute("max", "26430");
+  fireEvent.change(slider, { target: { value: "8700" } });
+  expect(screen.getByText("2:25 into the day")).toBeInTheDocument();
+  expect(screen.getByText(/Current: 0 of 1 done. Optimized: 2 of 2 done./)).toBeInTheDocument();
+  // The current truck is a third of the way along; the first optimized truck is home.
+  expect(screen.getByText(/trucks at/).textContent).toContain('"optimized":[[1,1],null]');
 });

@@ -126,3 +126,15 @@ label.inline {
   grid-template-columns: 1fr 1fr;
   gap: 0.5rem;
 }
+
+.playback {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.playback input[type="range"] {
+  flex: 1;
+  min-width: 12rem;
+}

@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useCallback, useState } from "react";
 import { Link, useParams } from "react-router";
 
 import { api, dataOf, type Schemas } from "../api/client";
 import { CURRENT_COLOUR, truckColour } from "../map/style";
-import type { Layer, View } from "../map/RouteMap";
+import type { Layer, Trucks, View } from "../map/RouteMap";
+import { Playback } from "./Playback";
 import { StopTable } from "./StopTable";
 
 // The map library is large and needs WebGL, so it loads only when a map is shown.
@@ -91,6 +92,8 @@ export function RunPage() {
   const succeeded = run.data?.state === "succeeded";
   const [layers, setLayers] = useState<Set<Layer>>(new Set(["current", "optimized"]));
   const [view, setView] = useState<View>("overlay");
+  const [trucks, setTrucks] = useState<Trucks>({ current: [], optimized: [] });
+  const onTrucks = useCallback((next: Trucks) => setTrucks(next), []);
   function toggle(layer: Layer) {
     const next = new Set(layers);
     if (next.has(layer)) next.delete(layer);
@@ -182,8 +185,10 @@ export function RunPage() {
               optimized={report.data.optimized.routes.map((r) => r.path)}
               shown={layers}
               view={view}
+              trucks={trucks}
             />
           </Suspense>
+          <Playback report={report.data} onTrucks={onTrucks} />
           <h2>The whole area</h2>
           <Comparison current={report.data.current.area} optimized={report.data.optimized.area} />
           <h2>Optimized routes</h2>

@@ -3,6 +3,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef } from "react";
 
+import type { Point } from "./playback";
 import { BASEMAP_STYLE, CURRENT_COLOUR, truckColour } from "./style";
 
 export type Layer = "current" | "optimized";
@@ -14,6 +15,28 @@ export type View = "overlay" | "split";
 const FIT_PADDING_PX = 40;
 
 type Path = [number, number][];
+
+/** Where each truck is during playback, in route order; null where a route has no path. */
+export type Trucks = { current: (Point | null)[]; optimized: (Point | null)[] };
+
+const NO_TRUCKS: Trucks = { current: [], optimized: [] };
+
+function truckPoints(trucks: Trucks, layers: Layer[]): FeatureCollection {
+  const features: FeatureCollection["features"] = [];
+  const add = (points: (Point | null)[], colour: (index: number) => string) =>
+    points.forEach((point, index) => {
+      if (point !== null) {
+        features.push({
+          type: "Feature",
+          properties: { colour: colour(index) },
+          geometry: { type: "Point", coordinates: point },
+        });
+      }
+    });
+  if (layers.includes("current")) add(trucks.current, () => CURRENT_COLOUR);
+  if (layers.includes("optimized")) add(trucks.optimized, truckColour);
+  return { type: "FeatureCollection", features };
+}
 
 function lines(paths: Path[], colours: (index: number) => string): FeatureCollection {
   return {
@@ -50,6 +73,18 @@ function routeMap(
     };
     if (layers.includes("current")) add("current", lines(current, () => CURRENT_COLOUR), 6);
     if (layers.includes("optimized")) add("optimized", lines(optimized, truckColour), 3);
+    map.addSource("trucks", { type: "geojson", data: truckPoints(NO_TRUCKS, layers) });
+    map.addLayer({
+      id: "trucks",
+      type: "circle",
+      source: "trucks",
+      paint: {
+        "circle-radius": 8,
+        "circle-color": ["get", "colour"],
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 2,
+      },
+    });
   });
   return map;
 }
@@ -78,15 +113,18 @@ export function RouteMap({
   optimized,
   shown,
   view,
+  trucks = NO_TRUCKS,
 }: {
   current: Path[];
   optimized: Path[];
   shown: Set<Layer>;
   view: View;
+  trucks?: Trucks;
 }) {
   const left = useRef<HTMLDivElement>(null);
   const right = useRef<HTMLDivElement>(null);
   const overlay = useRef<maplibregl.Map | null>(null);
+  const drawn = useRef<{ map: maplibregl.Map; layers: Layer[] }[]>([]);
 
   useEffect(() => {
     if (left.current === null) return;
@@ -96,13 +134,19 @@ export function RouteMap({
       const b = routeMap(right.current, ["optimized"], current, optimized);
       moveTogether(a, b);
       maps.push(a, b);
+      drawn.current = [
+        { map: a, layers: ["current"] },
+        { map: b, layers: ["optimized"] },
+      ];
     } else {
       overlay.current = routeMap(left.current, ["current", "optimized"], current, optimized);
       maps.push(overlay.current);
+      drawn.current = [{ map: overlay.current, layers: ["current", "optimized"] }];
     }
     return () => {
       for (const map of maps) map.remove();
       overlay.current = null;
+      drawn.current = [];
     };
     // One run's routes do not change; a new view builds new maps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -121,6 +165,13 @@ export function RouteMap({
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);
   }, [shown, view]);
+
+  useEffect(() => {
+    for (const { map, layers } of drawn.current) {
+      const source = map.getSource("trucks") as maplibregl.GeoJSONSource | undefined;
+      source?.setData(truckPoints(trucks, layers));
+    }
+  }, [trucks, view]);
 
   if (view === "split") {
     return (
