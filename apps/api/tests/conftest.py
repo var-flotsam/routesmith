@@ -19,13 +19,13 @@ from sqlalchemy import text
 from starboard.api.app import create_app
 from starboard.api.email import RecordingEmailSender
 from starboard.api.models import Base
-from starboard.api.queue import IMPORT_UPLOAD, RecordingQueue
+from starboard.api.queue import IMPORT_UPLOAD, SOLVE_RUN, RecordingQueue
 from starboard.api.settings import Settings
 from starboard.api.storage import LocalObjectStore
 from starboard.geo.state_graph import build_state_graph
 from starboard.geo.synthetic import Grid
 from starboard.solver.graph import StateGraph
-from starboard.worker.jobs import Context, import_upload
+from starboard.worker.jobs import Context, import_upload, solve_run
 
 DATABASE_URL = os.environ.get("STARBOARD_TEST_DATABASE_URL")
 ROOT = Path(__file__).resolve().parents[3]
@@ -74,7 +74,7 @@ class Api:
 
     async def run_jobs(self) -> list[str]:
         context = Context(self.app.state.sessions, self.app.state.store, self.network)
-        jobs = {IMPORT_UPLOAD: import_upload}
+        jobs = {IMPORT_UPLOAD: import_upload, SOLVE_RUN: solve_run}
         outcomes = []
         while self.queue.jobs:
             name, row_id = self.queue.jobs.pop(0)
