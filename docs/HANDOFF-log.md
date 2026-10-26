@@ -203,3 +203,44 @@
   deploy.
 - Docker or Postgres on this machine. Until then, database tests run in CI only.
 - Merging #36 to #45.
+
+## 2026-10-26 (phase 5, web v1, running locally)
+
+**Done**
+
+- #47: address uploads are geocoded with the free US Census batch geocoder
+  (ADR-0005). Doubtful matches go to review.
+- #48: the web app: React, Vite and TanStack Query, with an API client typed
+  from the OpenAPI spec (CI checks the two match), sign-in, and organizations.
+- #49: routes and stop-list uploads in the web app.
+- #50: stops in review carry their point and their candidate streets, drawn,
+  each with the curb side its point is on.
+- #51: the review queue on a map (MapLibre, OpenFreeMap tiles).
+- #52: solving from the route page, and a run page comparing current and
+  optimized for the area (the run report is typed in the API).
+- #53: `python -m starboard.api.demo you@example.com` preloads the Byram demo.
+- #54: the web app runs in Docker Compose, sign-in links are printed in the
+  API's output, and an OSM extract can be named in `.env`.
+- #55: a stop table on the run page.
+- Docker Desktop and WSL2 are installed on the owner's machine; they need a
+  restart before they work.
+
+**Decisions (owner, 2026-10-26)**
+
+- A free geocoder for now: US Census (ADR-0005).
+- No hosting yet: the product runs locally under Docker Compose. Deploy later.
+
+**Next**
+
+- Tonight, after the restart: `docker compose up --build`, preload the demo,
+  sign in, review, and solve (README, "Run it locally"). This is the first run
+  of the web app against a real API.
+- Phase 6: the route paths from the API, the Current and Optimized map layers,
+  playback, permalinks and share links.
+- GitHub and Google OAuth. They need client registrations under the owner's
+  accounts.
+
+**Blocked on the owner**
+
+- Restarting the PC so Docker works.
+- Merging #36 to #55 (say "merge" in the thread).
