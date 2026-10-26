@@ -103,3 +103,20 @@ label.inline {
   gap: 0.5rem;
   align-items: center;
 }
+
+.map.large {
+  height: 32rem;
+}
+
+.layers {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.swatch {
+  display: inline-block;
+  width: 1rem;
+  height: 0.35rem;
+  border-radius: 0.2rem;
+  margin-right: 0.15rem;
+}

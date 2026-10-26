@@ -1,7 +1,19 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { vi } from "vitest";
+
 import { fakeApi, ME, renderApp } from "../test-helpers";
+
+// The map needs WebGL, which the test browser lacks; it reports what it was given instead.
+vi.mock("../map/RouteMap", () => ({
+  RouteMap: (props: { current: unknown[]; optimized: unknown[]; shown: Set<string> }) => (
+    <div>
+      map of {props.current.length} current and {props.optimized.length} optimized routes,
+      showing {[...props.shown].sort().join(" and ")}
+    </div>
+  ),
+}));
 
 const ROUTE = {
   id: "r1",
@@ -66,11 +78,14 @@ function card(routeTimeS: number, distanceM: number, stops: number) {
 const REPORT = {
   trucks: 2,
   objective: "balanced-total",
-  current: { routes: [{ route_id: null, scorecard: card(26430, 68288, 4) }], area: card(26430, 68288, 4) },
+  current: {
+    routes: [{ route_id: null, scorecard: card(26430, 68288, 4), path: [] }],
+    area: card(26430, 68288, 4),
+  },
   optimized: {
     routes: [
-      { scorecard: card(8671, 19733, 2), order: ["s1", "s2"] },
-      { scorecard: card(7691, 17413, 2), order: ["s3", "s4"] },
+      { scorecard: card(8671, 19733, 2), order: ["s1", "s2"], path: [] },
+      { scorecard: card(7691, 17413, 2), order: ["s3", "s4"], path: [] },
     ],
     area: card(16362, 37146, 4),
   },
@@ -192,4 +207,19 @@ test("the stop table lists each stop's current and optimized place, moved most f
   expect(firstColumn()).toEqual(["s3", "s1", "s2"]);
   await userEvent.click(screen.getByLabelText("Stops that moved most first"));
   expect(firstColumn()[0]).toBe("s3");
+});
+
+test("the run map shows both route sets, and each can be hidden", async () => {
+  fakeApi({
+    "GET /me": { status: 200, body: ME },
+    "GET /orgs/o1/runs/run1": { status: 200, body: RUN },
+    "GET /orgs/o1/runs/run1/result": { status: 200, body: REPORT },
+    "GET /orgs/o1/uploads/up1/stops": { status: 200, body: [] },
+  });
+  renderApp("/orgs/o1/runs/run1");
+  expect(
+    await screen.findByText(/map of 1 current and 2 optimized routes, showing current and optimized/),
+  ).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("checkbox", { name: /Current/ }));
+  expect(await screen.findByText(/showing optimized$/)).toBeInTheDocument();
 });

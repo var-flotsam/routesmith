@@ -1,8 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
+import { lazy, Suspense, useState } from "react";
 import { Link, useParams } from "react-router";
 
 import { api, dataOf, type Schemas } from "../api/client";
+import { CURRENT_COLOUR, truckColour } from "../map/style";
+import type { Layer } from "../map/RouteMap";
 import { StopTable } from "./StopTable";
+
+// The map library is large and needs WebGL, so it loads only when a map is shown.
+const RouteMap = lazy(async () => ({ default: (await import("../map/RouteMap")).RouteMap }));
+
+function Swatch({ colour }: { colour: string }) {
+  return <span className="swatch" style={{ background: colour }} />;
+}
 
 type Scorecard = Schemas["ScorecardOut"];
 
@@ -79,6 +89,13 @@ export function RunPage() {
         : false,
   });
   const succeeded = run.data?.state === "succeeded";
+  const [layers, setLayers] = useState<Set<Layer>>(new Set(["current", "optimized"]));
+  function toggle(layer: Layer) {
+    const next = new Set(layers);
+    if (next.has(layer)) next.delete(layer);
+    else next.add(layer);
+    setLayers(next);
+  }
   const report = useQuery({
     queryKey: ["result", runId],
     enabled: succeeded,
@@ -115,6 +132,34 @@ export function RunPage() {
           {report.data.time_limited && (
             <p className="muted">The search hit its time ceiling; another machine may differ.</p>
           )}
+          <div className="layers" role="group" aria-label="Map layers">
+            <label className="inline">
+              <input
+                type="checkbox"
+                checked={layers.has("current")}
+                onChange={() => toggle("current")}
+              />
+              <Swatch colour={CURRENT_COLOUR} /> Current
+            </label>
+            <label className="inline">
+              <input
+                type="checkbox"
+                checked={layers.has("optimized")}
+                onChange={() => toggle("optimized")}
+              />
+              {report.data.optimized.routes.map((_, index) => (
+                <Swatch key={index} colour={truckColour(index)} />
+              ))}{" "}
+              Optimized
+            </label>
+          </div>
+          <Suspense fallback={<div className="map large">Loading the map…</div>}>
+            <RouteMap
+              current={report.data.current.routes.map((r) => r.path)}
+              optimized={report.data.optimized.routes.map((r) => r.path)}
+              shown={layers}
+            />
+          </Suspense>
           <h2>The whole area</h2>
           <Comparison current={report.data.current.area} optimized={report.data.optimized.area} />
           <h2>Optimized routes</h2>
@@ -122,6 +167,7 @@ export function RunPage() {
             <thead>
               <tr>
                 <th>Route</th>
+                <th />
                 <th>Route time</th>
                 <th>Distance</th>
                 <th>Stops</th>
@@ -131,6 +177,9 @@ export function RunPage() {
               {report.data.optimized.routes.map((route, index) => (
                 <tr key={index}>
                   <th scope="row">{index + 1}</th>
+                  <td>
+                    <Swatch colour={truckColour(index)} />
+                  </td>
                   <td>{shown(route.scorecard.route_time_s, "h")}</td>
                   <td>{shown(route.scorecard.distance_m, "km")}</td>
                   <td>{route.scorecard.stops_serviced}</td>

@@ -5,9 +5,8 @@ import { useEffect, useRef } from "react";
 import type { FeatureCollection } from "geojson";
 
 import type { Schemas } from "../api/client";
+import { BASEMAP_STYLE } from "./style";
 
-// Free vector tiles from OpenStreetMap data, no key needed (https://openfreemap.org).
-export const BASEMAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 // Close enough to read street names around one stop.
 const STOP_ZOOM = 17;
 
