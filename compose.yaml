@@ -66,6 +66,22 @@ services:
       redis:
         condition: service_healthy
 
+  web:
+    image: node:24-slim
+    working_dir: /app/apps/web
+    command: ["sh", "-c", "corepack enable && pnpm install --frozen-lockfile && pnpm dev --host"]
+    environment:
+      STARBOARD_API_TARGET: http://api:8000
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./apps/web:/app/apps/web
+      - web-modules:/app/apps/web/node_modules
+    depends_on:
+      - api
+
 volumes:
+  web-modules:
   db-data:
   app-cache:

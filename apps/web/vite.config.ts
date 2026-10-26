@@ -9,7 +9,8 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": {
-        target: "http://localhost:8000",
+        // Docker Compose points this at its api service.
+        target: process.env.STARBOARD_API_TARGET ?? "http://localhost:8000",
         rewrite: (path) => path.replace(/^\/api/, ""),
       },
     },
