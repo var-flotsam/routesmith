@@ -14,8 +14,11 @@ class Settings(BaseSettings):
 
     # The local Compose database; deployed environments set STARBOARD_DATABASE_URL.
     database_url: str = "postgresql+asyncpg://starboard:starboard@localhost:5432/starboard"
-    # Where sign-in links point.
+    # The web app, where a signed-in browser lands.
     app_base_url: str = "http://localhost:5173"
+    # The API as the browser reaches it (the web app proxies it under /api); sign-in links
+    # point here.
+    api_public_url: str = "http://localhost:5173/api"
     # A magic link is used minutes after it is sent; a short life limits a leaked email.
     login_token_ttl: timedelta = timedelta(minutes=15)
     # A planner signs in about once a working week.

@@ -41,7 +41,7 @@ async def send_magic_link(body: MagicLinkRequest, request: Request, db: Database
     expires = datetime.now(UTC) + settings.login_token_ttl
     db.add(LoginToken(token_hash=token_hash(token), email=email, expires_at=expires))
     await db.commit()
-    link = f"{request.base_url}auth/callback?{urlencode({'token': token})}"
+    link = f"{settings.api_public_url}/auth/callback?{urlencode({'token': token})}"
     await request.app.state.email_sender.send_sign_in_link(email, link)
 
 
