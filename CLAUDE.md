@@ -26,14 +26,14 @@ dependencies are out).
 
 ```
 uv sync --all-packages                 # Python deps
-pnpm install                           # web deps
+(cd apps/web && pnpm install)          # web deps
 docker compose up -d db redis          # local Postgres/PostGIS and Redis
 docker compose up --build              # the whole stack: API on :8000 and the worker
 uv run alembic upgrade head            # migrations
 uv run pytest                          # all Python tests
 uv run pytest packages/solver -m property   # solver property tests only
 uv run ruff check . && uv run ruff format --check . && uv run mypy
-pnpm -C apps/web test && pnpm -C apps/web lint && pnpm -C apps/web typecheck
+(cd apps/web && pnpm test && pnpm lint && pnpm typecheck)   # pnpm via corepack
 uv run starboard score data/demo/stops.csv       # baseline scorecard, no solve
 uv run starboard optimize data/demo/stops.csv    # full run from the CLI
 ```
