@@ -53,15 +53,12 @@ class StopOut(BaseModel):
 
 
 async def _out(db: Database, upload: Upload) -> UploadOut:
-    counts = dict(
-        (
-            await db.execute(
-                select(Stop.state, func.count())
-                .where(Stop.org_id == upload.org_id, Stop.upload_id == upload.id)
-                .group_by(Stop.state)
-            )
-        ).tuples()
+    rows = await db.execute(
+        select(Stop.state, func.count())
+        .where(Stop.org_id == upload.org_id, Stop.upload_id == upload.id)
+        .group_by(Stop.state)
     )
+    counts: dict[StopState, int] = {state: count for state, count in rows.all()}
     return UploadOut(
         id=upload.id,
         route_id=upload.route_id,
