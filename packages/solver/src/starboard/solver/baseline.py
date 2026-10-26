@@ -25,7 +25,7 @@ them the route starts at the first stop and ends at the last.
 import heapq
 import itertools
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from starboard.solver import defaults
@@ -366,6 +366,16 @@ def build_baseline(
 ) -> DrivenRoute:
     """Drive `stops` street by street and record every pass, turn and pickup side."""
     allowed_u_turns = u_turn_nodes(graph, stops, rules or RoutingRules())
+    return _build(graph, stops, allowed_u_turns, sites, profile)
+
+
+def _build(
+    graph: StateGraph,
+    stops: Sequence[SnappedStop],
+    allowed_u_turns: frozenset[int],
+    sites: RouteSites | None,
+    profile: TruckProfile | None,
+) -> DrivenRoute:
     router = _Router(graph, allowed_u_turns)
     drive = _Drive(router)
     capacity = (profile or TruckProfile()).capacity_carts
@@ -434,3 +444,34 @@ def _finish(drive: _Drive, sites: RouteSites) -> tuple[PlaceVisit, ...]:
     closing = tuple(drive.pending)
     drive.pending.clear()
     return closing
+
+
+def routes_by_id(
+    stops: Sequence[SnappedStop], route_of: Mapping[str, str]
+) -> dict[str, list[SnappedStop]]:
+    """Each route id's stops, in their order; stops `route_of` does not name are left out."""
+    on_route: dict[str, list[SnappedStop]] = defaultdict(list)
+    for stop in stops:
+        if stop.stop_id in route_of:
+            on_route[route_of[stop.stop_id]].append(stop)
+    return {route_id: on_route[route_id] for route_id in sorted(on_route)}
+
+
+def current_routes(
+    graph: StateGraph,
+    stops_by_route: Mapping[str, Sequence[SnappedStop]],
+    rules: RoutingRules | None = None,
+    sites: RouteSites | None = None,
+    profile: TruckProfile | None = None,
+) -> dict[str, DrivenRoute]:
+    """Each truck's current route, keyed by route id, each driven as `build_baseline` does.
+
+    U-turns are judged on the whole area's stops, the same rule the optimized
+    routes use, so a truck's route gets no U-turn the area's density forbids.
+    """
+    every = [s for stops in stops_by_route.values() for s in stops]
+    allowed = u_turn_nodes(graph, every, rules or RoutingRules())
+    return {
+        route_id: _build(graph, stops, allowed, sites, profile)
+        for route_id, stops in stops_by_route.items()
+    }

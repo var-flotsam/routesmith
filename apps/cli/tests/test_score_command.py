@@ -110,3 +110,44 @@ def test_optimize_with_two_trucks_reports_two_routes(tmp_path, monkeypatch, caps
     assert len(report["routes"]) == 2
     assert sum(r["stops_serviced"] for r in report["routes"]) == 4
     assert report["area"]["objective"] == "balanced-total"
+
+
+def routes_csv(tmp_path):
+    rows = ["stop_id,route_id,current_sequence,lon,lat"]
+    points = [(20, -10), (60, -10), (30, 290), (230, 290)]
+    for index, (x, y) in enumerate(points, start=1):
+        point = GRID.at(x, y)
+        route_id = "A" if index <= 2 else "B"
+        rows.append(f"s{index},{route_id},{index},{point.lon},{point.lat}")
+    path = tmp_path / "routes.csv"
+    path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    return path
+
+
+def test_optimize_compares_each_current_route_and_the_area(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(
+        cli, "fetch_network", lambda bbox, cache_dir, extract: build_state_graph(GRID.segments())
+    )
+    yard = GRID.at(0, 0)
+    args = [
+        "optimize",
+        str(routes_csv(tmp_path)),
+        f"--yard={yard.lon},{yard.lat}",
+        f"--disposal={yard.lon},{yard.lat}",
+        "--json",
+    ]
+    assert cli.main(args) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert len(report["routes"]) == 2  # as many trucks as current routes
+    assert set(report["current_routes"]) == {"A", "B"}
+    assert report["current_area"]["stops_serviced"] == 4
+    assert report["optimized_area"]["stops_serviced"] == 4
+
+
+def test_score_prints_each_current_route_and_the_area(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(
+        cli, "fetch_network", lambda bbox, cache_dir, extract: build_state_graph(GRID.segments())
+    )
+    assert cli.main(["score", str(routes_csv(tmp_path))]) == 0
+    out = capsys.readouterr().out
+    assert "Area" in out and " A " in out.splitlines()[3] + " "

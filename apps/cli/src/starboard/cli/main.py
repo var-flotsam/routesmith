@@ -6,6 +6,11 @@ route and prints both scorecards side by side. The route file gives the yard,
 the disposal site and the truck (see data/demo/route.json); `--yard`,
 `--disposal`, `--capacity` and `--max-hours` override it. Write sites with
 "=" (`--yard=-73.65,41.02`), since a negative longitude reads as a flag.
+
+When the stop file has a `route_id` column, each truck's current route is
+driven on its own and the area's current scorecard is the sum of them;
+`optimize` then splits the area among as many trucks as there are current
+routes unless `--trucks` says otherwise.
 """
 
 import argparse
@@ -23,14 +28,14 @@ from starboard.geo.extract import download_extract
 from starboard.geo.osm import DEFAULT_CACHE_DIR, bbox_around, fetch_network
 from starboard.geo.places import place_at
 from starboard.geo.snapping import SnapOutcome, snap_stops
-from starboard.solver.baseline import build_baseline
+from starboard.solver.baseline import build_baseline, current_routes, routes_by_id
 from starboard.solver.fleet import Area, FleetSettings, solve_routes
 from starboard.solver.graph import LonLat, StateGraph
 from starboard.solver.objectives import RouteObjective
 from starboard.solver.optimize import SolveSettings, optimize
 from starboard.solver.route import RouteSites, TruckProfile
 from starboard.solver.rules import RoutingRules, UTurnPolicy
-from starboard.solver.scorecard import Scorecard, score
+from starboard.solver.scorecard import Scorecard, area_scorecard, score
 
 # Room around the outermost stops and sites for the streets that bound them.
 NETWORK_MARGIN_M = 300.0
@@ -73,6 +78,16 @@ def _comparison(current: Scorecard, optimized: Scorecard) -> str:
             f"{label:<{width}}  {fmt.format(now[key]):>14}  {fmt.format(new[key]):>14}"
             f"  {sign + fmt.format(change):>14}"
         )
+    return "\n".join(lines)
+
+
+def _columns(headers: Sequence[str], cards: Sequence[Scorecard]) -> str:
+    """One column per scorecard, under its header."""
+    width = max(len(label) for label, _, _ in _ROWS)
+    lines = [f"{'':<{width}}" + "".join(f"  {h:>12}" for h in headers)]
+    for label, key, fmt in _ROWS:
+        values = [fmt.format(asdict(c)[key]) for c in cards]
+        lines.append(f"{label:<{width}}" + "".join(f"  {v:>12}" for v in values))
     return "\n".join(lines)
 
 
@@ -170,14 +185,23 @@ def score_command(args: argparse.Namespace) -> int:
     if isinstance(loaded, int):
         return loaded
     rules = RoutingRules(u_turns=UTurnPolicy(args.u_turns))
-    route = build_baseline(
-        loaded.graph, loaded.outcome.snapped, rules, sites=loaded.sites, profile=_profile(args)
-    )
-    card = score(loaded.graph, route)
+    stops, route_of = loaded.outcome.snapped, loaded.stop_file.route_of
+    if route_of:
+        routes = current_routes(
+            loaded.graph, routes_by_id(stops, route_of), rules, loaded.sites, _profile(args)
+        )
+        by_route = {route_id: score(loaded.graph, r) for route_id, r in routes.items()}
+        card = area_scorecard(list(by_route.values()))
+    else:
+        route = build_baseline(
+            loaded.graph, stops, rules, sites=loaded.sites, profile=_profile(args)
+        )
+        by_route, card = {}, score(loaded.graph, route)
     review = Counter(item.reason.value for item in loaded.outcome.review)
     if args.json:
         report = {
             "scorecard": asdict(card),
+            "routes": {route_id: asdict(c) for route_id, c in by_route.items()},
             "osm_snapshot": loaded.graph.osm_snapshot,
             "rejected_rows": len(loaded.stop_file.rejected),
             "review_items": dict(sorted(review.items())),
@@ -187,7 +211,10 @@ def score_command(args: argparse.Namespace) -> int:
     print(f"Current route: {args.stops}")
     print(f"OSM snapshot: {loaded.graph.osm_snapshot}")
     print()
-    print(_table(card))
+    if by_route:
+        print(_columns([*by_route, "Area"], [*by_route.values(), card]))
+    else:
+        print(_table(card))
     _print_footer(loaded)
     return 0
 
@@ -207,7 +234,10 @@ def optimize_command(args: argparse.Namespace) -> int:
     rules = RoutingRules(u_turns=UTurnPolicy(args.u_turns))
     profile = _profile(args)
     stops = loaded.outcome.snapped
-    if args.trucks > 1:
+    route_of = loaded.stop_file.route_of
+    if args.trucks is None:
+        args.trucks = len(set(route_of.values())) or 1
+    if args.trucks > 1 or route_of:
         return _optimize_fleet(args, loaded, SolveSettings(profile, rules))
     try:
         current = build_baseline(loaded.graph, stops, rules, sites=loaded.sites, profile=profile)
@@ -258,6 +288,17 @@ def _optimize_fleet(args: argparse.Namespace, loaded: _Loaded, settings: SolveSe
         print(str(error), file=sys.stderr)
         return 1
     cards = [score(loaded.graph, r.route) for r in result.routes]
+    route_of = loaded.stop_file.route_of
+    current: dict[str, Scorecard] = {}
+    if route_of:
+        driven = current_routes(
+            loaded.graph,
+            routes_by_id(area.stops, route_of),
+            settings.rules,
+            area.sites,
+            settings.profile,
+        )
+        current = {route_id: score(loaded.graph, r) for route_id, r in driven.items()}
     summary = {
         "objective": result.objective.value,
         "total_route_time_s": result.total_ms / _MS_PER_S,
@@ -271,18 +312,27 @@ def _optimize_fleet(args: argparse.Namespace, loaded: _Loaded, settings: SolveSe
         report = {
             "routes": [asdict(c) for c in cards],
             "area": summary,
+            "optimized_area": asdict(area_scorecard(cards)),
             "osm_snapshot": loaded.graph.osm_snapshot,
         }
+        if current:
+            report["current_routes"] = {route_id: asdict(c) for route_id, c in current.items()}
+            report["current_area"] = asdict(area_scorecard(list(current.values())))
         print(json.dumps(report, indent=2))
         return 0
     print(f"Area: {args.stops}, {args.trucks} trucks, objective {result.objective.value}")
     print(f"OSM snapshot: {loaded.graph.osm_snapshot}")
+    if current:
+        print()
+        print(f"Current routes ({len(current)})")
+        print(_columns(list(current), list(current.values())))
     print()
-    width = max(len(label) for label, _, _ in _ROWS)
-    print(f"{'':<{width}}" + "".join(f"  {'Route ' + str(k + 1):>12}" for k in range(len(cards))))
-    for label, key, fmt in _ROWS:
-        values = [fmt.format(asdict(c)[key]) for c in cards]
-        print(f"{label:<{width}}" + "".join(f"  {v:>12}" for v in values))
+    print(f"Optimized routes ({len(cards)})")
+    print(_columns([f"Route {k + 1}" for k in range(len(cards))], cards))
+    if current:
+        print()
+        print("Area")
+        print(_comparison(area_scorecard(list(current.values())), area_scorecard(cards)))
     print()
     total, longest = result.total_ms / _MS_PER_S, result.longest_ms / _MS_PER_S
     bound = result.total_bound_ms / _MS_PER_S
@@ -330,7 +380,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     _common(optimize_parser)
     optimize_parser.add_argument(
-        "--trucks", type=int, default=1, metavar="N", help="split the area into N routes"
+        "--trucks",
+        type=int,
+        metavar="N",
+        help="split the area into N routes (default: the number of current routes, else 1)",
     )
     optimize_parser.add_argument(
         "--objective",

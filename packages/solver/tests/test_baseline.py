@@ -4,11 +4,11 @@ from starboard.geo.snapping import Snapper, StopPoint
 from starboard.geo.state_graph import RestrictionKind, TurnRestriction, build_state_graph
 from starboard.geo.synthetic import Grid
 from starboard.solver import defaults
-from starboard.solver.baseline import build_baseline
+from starboard.solver.baseline import build_baseline, current_routes, routes_by_id
 from starboard.solver.graph import Direction, Pass, Place, SnappedStop
 from starboard.solver.route import RouteSites, TruckProfile
-from starboard.solver.rules import RoutingRules, UTurnPolicy
-from starboard.solver.scorecard import score
+from starboard.solver.rules import RoutingRules, UTurnPolicy, u_turn_nodes
+from starboard.solver.scorecard import area_scorecard, score
 
 GRID = Grid()
 GRAPH = build_state_graph(GRID.segments())
@@ -207,3 +207,21 @@ def test_with_a_capacity_the_current_route_unloads_when_full():
     unloads = [v for v in route.place_visits if v.unload]
     assert len(unloads) == 2  # once when full, once at the end
     assert score(GRAPH, route).disposal_visits == 2
+
+
+def test_each_current_route_serves_its_own_stops_with_the_area_u_turns():
+
+    stops = [stop("a", 20, -10), stop("b", 60, -10), stop("c", 30, 290), stop("d", 230, 290)]
+    route_of = {"a": "R2", "b": "R2", "c": "R1", "d": "R1"}
+    by_route = routes_by_id(stops, route_of)
+    assert list(by_route) == ["R1", "R2"]
+    sites = RouteSites(Place("yard", 0), Place("disposal", 0))
+    routes = current_routes(GRAPH, by_route, sites=sites)
+    assert sorted(p.stop_id for p in routes["R1"].pickups) == ["c", "d"]
+    assert sorted(p.stop_id for p in routes["R2"].pickups) == ["a", "b"]
+    area = u_turn_nodes(GRAPH, stops, RoutingRules())
+    assert all(r.u_turn_nodes == area for r in routes.values())
+    cards = [score(GRAPH, r) for r in routes.values()]
+    total = area_scorecard(cards)
+    assert total.stops_serviced == 4
+    assert total.route_time_s == pytest.approx(sum(c.route_time_s for c in cards))
