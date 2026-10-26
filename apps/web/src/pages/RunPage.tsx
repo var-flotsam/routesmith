@@ -153,7 +153,7 @@ export function RunPage() {
               Optimized
             </label>
           </div>
-          <Suspense fallback={<div className="map large">Loading the map…</div>}>
+          <Suspense fallback={<div className="map large">Loading the mapâ€¦</div>}>
             <RouteMap
               current={report.data.current.routes.map((r) => r.path)}
               optimized={report.data.optimized.routes.map((r) => r.path)}
