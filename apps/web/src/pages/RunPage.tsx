@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router";
 
 import { api, dataOf } from "../api/client";
+import { Downloads } from "./Downloads";
 import { ReportView } from "./ReportView";
 import { ShareControls } from "./ShareControls";
 import { StopTable } from "./StopTable";
@@ -49,6 +50,7 @@ export function RunPage() {
       {report.data && (
         <>
           <ShareControls orgId={orgId} runId={runId} />
+          <Downloads orgId={orgId} runId={runId} />
           <ReportView report={report.data}>
             {run.data && (
               <>
