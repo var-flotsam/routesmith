@@ -4,6 +4,7 @@ import { Route, Routes } from "react-router";
 import { api, ApiError, dataOf } from "./api/client";
 import { Organizations } from "./pages/Organizations";
 import { OrgPage } from "./pages/OrgPage";
+import { ReviewPage } from "./pages/ReviewPage";
 import { RoutePage } from "./pages/RoutePage";
 import { SignIn } from "./pages/SignIn";
 
@@ -37,6 +38,7 @@ export function App() {
         <Routes>
           <Route path="/orgs/:orgId" element={<OrgPage />} />
           <Route path="/orgs/:orgId/routes/:routeId" element={<RoutePage />} />
+          <Route path="/orgs/:orgId/uploads/:uploadId/review" element={<ReviewPage />} />
           <Route path="*" element={<Organizations me={me.data} />} />
         </Routes>
       </main>
