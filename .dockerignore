@@ -1,0 +1,13 @@
+.git
+.venv
+cache
+data/osm
+**/__pycache__
+**/.mypy_cache
+**/.pytest_cache
+**/.ruff_cache
+**/.hypothesis
+apps/web/node_modules
+.env
+.env.*
+CLAUDE.local.md

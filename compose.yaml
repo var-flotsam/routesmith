@@ -1,0 +1,71 @@
+# The local stack: `docker compose up` for everything, or `docker compose up -d db redis`
+# to run the API and worker from the checkout. Passwords here are for this local stack only.
+
+x-app: &app
+  build:
+    context: .
+    dockerfile: infra/Dockerfile
+  environment:
+    STARBOARD_DATABASE_URL: postgresql+asyncpg://starboard:starboard@db:5432/starboard
+    STARBOARD_REDIS_URL: redis://redis:6379
+    STARBOARD_UPLOAD_DIR: /app/cache/uploads
+    STARBOARD_OSM_CACHE_DIR: /app/cache/osm
+    STARBOARD_COOKIE_SECURE: "false"
+  volumes:
+    - app-cache:/app/cache
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: starboard
+      POSTGRES_PASSWORD: starboard
+      POSTGRES_DB: starboard
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U starboard"]
+      interval: 5s
+      retries: 20
+
+  redis:
+    # 7.2 is the last Redis release under the BSD licence.
+    image: redis:7.2-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+
+  migrate:
+    <<: *app
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  worker:
+    <<: *app
+    command: ["arq", "starboard.worker.main.WorkerSettings"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+volumes:
+  db-data:
+  app-cache:
