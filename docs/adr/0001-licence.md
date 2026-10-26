@@ -18,6 +18,8 @@ available. The copyright holder is "var-flotsam".
 ## Consequences
 
 - Source-available, not open source, for two years per version.
+- One folder is not under it: `data/demo/result/`, the static demo's result,
+  is derived from OpenStreetMap and is under the ODbL 1.0 (ADR-0007, 2026-10-26).
 - Dependencies must be compatible: GPL and AGPL libraries are not linked into
   the product. Services run alongside it over a network (such as a
   self-hosted Nominatim) are not dependencies in this sense.

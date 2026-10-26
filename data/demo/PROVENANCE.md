@@ -69,3 +69,20 @@ Geofabrik extract.
 The Town's directions say trucks over 6,000 lb may not use St. Roch Avenue to
 reach Holly Hill Lane (https://www.greenwichct.gov/DocumentCenter/View/557/Directions-to-Holly-Hill-PDF).
 OSM does not tag that restriction, so the demo network does not apply it.
+
+## `result/`: the static demo's result
+
+`result/shared-run.json` and `result/about.json` are the demo route's result for
+the static demo (`docs/adr/0007-static-demo.md`). `starboard.worker.demo_result`
+builds them from `stops.csv`, `route.json` and the OSM street network, as the
+worker builds a run's result once a planner has left out every stop in review:
+
+    uv run python -m starboard.worker.demo_result --osm-extract cache/osm/extracts/connecticut-latest.osm.pbf
+
+`about.json` records the OSM snapshot and the SHA-256 of `stops.csv` and
+`route.json`; a test fails when either file no longer matches. Rebuilding with
+unchanged inputs rewrites the files byte for byte.
+
+The routes' paths and the route sheets' street names are derived from
+OpenStreetMap data, so `result/` is under the ODbL 1.0 (© OpenStreetMap
+contributors), as `result/LICENSE.md` says.
