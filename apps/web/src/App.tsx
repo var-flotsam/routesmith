@@ -6,6 +6,7 @@ import { Organizations } from "./pages/Organizations";
 import { OrgPage } from "./pages/OrgPage";
 import { ReviewPage } from "./pages/ReviewPage";
 import { RoutePage } from "./pages/RoutePage";
+import { RunPage } from "./pages/RunPage";
 import { SignIn } from "./pages/SignIn";
 
 /** Who is signed in; a 401 means nobody, which is not an error. */
@@ -39,6 +40,7 @@ export function App() {
           <Route path="/orgs/:orgId" element={<OrgPage />} />
           <Route path="/orgs/:orgId/routes/:routeId" element={<RoutePage />} />
           <Route path="/orgs/:orgId/uploads/:uploadId/review" element={<ReviewPage />} />
+          <Route path="/orgs/:orgId/runs/:runId" element={<RunPage />} />
           <Route path="*" element={<Organizations me={me.data} />} />
         </Routes>
       </main>

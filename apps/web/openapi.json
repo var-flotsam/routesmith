@@ -72,6 +72,50 @@
         "title": "CurbSide",
         "type": "string"
       },
+      "CurrentRoute": {
+        "properties": {
+          "route_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Id"
+          },
+          "scorecard": {
+            "$ref": "#/components/schemas/ScorecardOut"
+          }
+        },
+        "required": [
+          "route_id",
+          "scorecard"
+        ],
+        "title": "CurrentRoute",
+        "type": "object"
+      },
+      "CurrentSide": {
+        "properties": {
+          "area": {
+            "$ref": "#/components/schemas/ScorecardOut"
+          },
+          "routes": {
+            "items": {
+              "$ref": "#/components/schemas/CurrentRoute"
+            },
+            "title": "Routes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "routes",
+          "area"
+        ],
+        "title": "CurrentSide",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -236,6 +280,46 @@
           "upload_id"
         ],
         "title": "NewRun",
+        "type": "object"
+      },
+      "OptimizedRoute": {
+        "properties": {
+          "order": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Order",
+            "type": "array"
+          },
+          "scorecard": {
+            "$ref": "#/components/schemas/ScorecardOut"
+          }
+        },
+        "required": [
+          "scorecard",
+          "order"
+        ],
+        "title": "OptimizedRoute",
+        "type": "object"
+      },
+      "OptimizedSide": {
+        "properties": {
+          "area": {
+            "$ref": "#/components/schemas/ScorecardOut"
+          },
+          "routes": {
+            "items": {
+              "$ref": "#/components/schemas/OptimizedRoute"
+            },
+            "title": "Routes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "routes",
+          "area"
+        ],
+        "title": "OptimizedSide",
         "type": "object"
       },
       "OrgMembership": {
@@ -608,6 +692,81 @@
         "title": "RunOut",
         "type": "object"
       },
+      "RunReport": {
+        "description": "Current against optimized for one run (`starboard.solver.comparison.compare`).",
+        "properties": {
+          "balance_met": {
+            "title": "Balance Met",
+            "type": "boolean"
+          },
+          "current": {
+            "$ref": "#/components/schemas/CurrentSide"
+          },
+          "gap": {
+            "title": "Gap",
+            "type": "number"
+          },
+          "longest_route_time_s": {
+            "title": "Longest Route Time S",
+            "type": "number"
+          },
+          "objective": {
+            "$ref": "#/components/schemas/RouteObjective"
+          },
+          "optimized": {
+            "$ref": "#/components/schemas/OptimizedSide"
+          },
+          "osm_snapshot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Osm Snapshot"
+          },
+          "time_limited": {
+            "title": "Time Limited",
+            "type": "boolean"
+          },
+          "total_lower_bound_s": {
+            "title": "Total Lower Bound S",
+            "type": "number"
+          },
+          "total_route_time_s": {
+            "title": "Total Route Time S",
+            "type": "number"
+          },
+          "trucks": {
+            "title": "Trucks",
+            "type": "integer"
+          },
+          "unserved": {
+            "items": {
+              "$ref": "#/components/schemas/UnservedOut"
+            },
+            "title": "Unserved",
+            "type": "array"
+          }
+        },
+        "required": [
+          "trucks",
+          "objective",
+          "current",
+          "optimized",
+          "total_route_time_s",
+          "longest_route_time_s",
+          "total_lower_bound_s",
+          "gap",
+          "balance_met",
+          "unserved",
+          "time_limited"
+        ],
+        "title": "RunReport",
+        "type": "object"
+      },
       "RunState": {
         "enum": [
           "queued",
@@ -617,6 +776,90 @@
         ],
         "title": "RunState",
         "type": "string"
+      },
+      "ScorecardOut": {
+        "description": "The measures for one route or an area, as `starboard.solver.scorecard` computes them.",
+        "properties": {
+          "dead_head_m": {
+            "title": "Dead Head M",
+            "type": "number"
+          },
+          "disposal_visits": {
+            "title": "Disposal Visits",
+            "type": "integer"
+          },
+          "distance_m": {
+            "title": "Distance M",
+            "type": "number"
+          },
+          "drive_time_s": {
+            "title": "Drive Time S",
+            "type": "number"
+          },
+          "left_turns": {
+            "title": "Left Turns",
+            "type": "integer"
+          },
+          "right_turns": {
+            "title": "Right Turns",
+            "type": "integer"
+          },
+          "route_time_s": {
+            "title": "Route Time S",
+            "type": "number"
+          },
+          "service_time_s": {
+            "title": "Service Time S",
+            "type": "number"
+          },
+          "stops_serviced": {
+            "title": "Stops Serviced",
+            "type": "integer"
+          },
+          "stops_unreachable": {
+            "title": "Stops Unreachable",
+            "type": "integer"
+          },
+          "street_passes": {
+            "title": "Street Passes",
+            "type": "integer"
+          },
+          "u_turns": {
+            "title": "U Turns",
+            "type": "integer"
+          },
+          "unload_time_s": {
+            "title": "Unload Time S",
+            "type": "number"
+          },
+          "wrong_side_pickups": {
+            "title": "Wrong Side Pickups",
+            "type": "integer"
+          },
+          "wrong_side_time_s": {
+            "title": "Wrong Side Time S",
+            "type": "number"
+          }
+        },
+        "required": [
+          "distance_m",
+          "drive_time_s",
+          "service_time_s",
+          "wrong_side_time_s",
+          "unload_time_s",
+          "route_time_s",
+          "left_turns",
+          "right_turns",
+          "u_turns",
+          "wrong_side_pickups",
+          "dead_head_m",
+          "street_passes",
+          "stops_serviced",
+          "stops_unreachable",
+          "disposal_visits"
+        ],
+        "title": "ScorecardOut",
+        "type": "object"
       },
       "StopOut": {
         "properties": {
@@ -761,6 +1004,24 @@
         ],
         "title": "StopState",
         "type": "string"
+      },
+      "UnservedOut": {
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "stop_id": {
+            "title": "Stop Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stop_id",
+          "reason"
+        ],
+        "title": "UnservedOut",
+        "type": "object"
       },
       "UploadOut": {
         "properties": {
@@ -2261,9 +2522,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Read Result Orgs  Org Id  Runs  Run Id  Result Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RunReport"
                 }
               }
             },

@@ -386,6 +386,18 @@ export interface components {
          * @enum {string}
          */
         CurbSide: "left" | "right";
+        /** CurrentRoute */
+        CurrentRoute: {
+            /** Route Id */
+            route_id: string | null;
+            scorecard: components["schemas"]["ScorecardOut"];
+        };
+        /** CurrentSide */
+        CurrentSide: {
+            area: components["schemas"]["ScorecardOut"];
+            /** Routes */
+            routes: components["schemas"]["CurrentRoute"][];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -451,6 +463,18 @@ export interface components {
              * Format: uuid
              */
             upload_id: string;
+        };
+        /** OptimizedRoute */
+        OptimizedRoute: {
+            /** Order */
+            order: string[];
+            scorecard: components["schemas"]["ScorecardOut"];
+        };
+        /** OptimizedSide */
+        OptimizedSide: {
+            area: components["schemas"]["ScorecardOut"];
+            /** Routes */
+            routes: components["schemas"]["OptimizedRoute"][];
         };
         /** OrgMembership */
         OrgMembership: {
@@ -587,10 +611,73 @@ export interface components {
             upload_id: string;
         };
         /**
+         * RunReport
+         * @description Current against optimized for one run (`starboard.solver.comparison.compare`).
+         */
+        RunReport: {
+            /** Balance Met */
+            balance_met: boolean;
+            current: components["schemas"]["CurrentSide"];
+            /** Gap */
+            gap: number;
+            /** Longest Route Time S */
+            longest_route_time_s: number;
+            objective: components["schemas"]["RouteObjective"];
+            optimized: components["schemas"]["OptimizedSide"];
+            /** Osm Snapshot */
+            osm_snapshot?: string | null;
+            /** Time Limited */
+            time_limited: boolean;
+            /** Total Lower Bound S */
+            total_lower_bound_s: number;
+            /** Total Route Time S */
+            total_route_time_s: number;
+            /** Trucks */
+            trucks: number;
+            /** Unserved */
+            unserved: components["schemas"]["UnservedOut"][];
+        };
+        /**
          * RunState
          * @enum {string}
          */
         RunState: "queued" | "running" | "succeeded" | "failed";
+        /**
+         * ScorecardOut
+         * @description The measures for one route or an area, as `starboard.solver.scorecard` computes them.
+         */
+        ScorecardOut: {
+            /** Dead Head M */
+            dead_head_m: number;
+            /** Disposal Visits */
+            disposal_visits: number;
+            /** Distance M */
+            distance_m: number;
+            /** Drive Time S */
+            drive_time_s: number;
+            /** Left Turns */
+            left_turns: number;
+            /** Right Turns */
+            right_turns: number;
+            /** Route Time S */
+            route_time_s: number;
+            /** Service Time S */
+            service_time_s: number;
+            /** Stops Serviced */
+            stops_serviced: number;
+            /** Stops Unreachable */
+            stops_unreachable: number;
+            /** Street Passes */
+            street_passes: number;
+            /** U Turns */
+            u_turns: number;
+            /** Unload Time S */
+            unload_time_s: number;
+            /** Wrong Side Pickups */
+            wrong_side_pickups: number;
+            /** Wrong Side Time S */
+            wrong_side_time_s: number;
+        };
         /** StopOut */
         StopOut: {
             /** Candidate Segment Ids */
@@ -624,6 +711,13 @@ export interface components {
          * @enum {string}
          */
         StopState: "snapped" | "review" | "rejected" | "excluded";
+        /** UnservedOut */
+        UnservedOut: {
+            /** Reason */
+            reason: string;
+            /** Stop Id */
+            stop_id: string;
+        };
         /** UploadOut */
         UploadOut: {
             /**
@@ -1795,9 +1889,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RunReport"];
                 };
             };
             /** @description the request body could not be read */

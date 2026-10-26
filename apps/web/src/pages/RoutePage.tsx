@@ -7,7 +7,19 @@ import { api, dataOf, postForm, type Schemas } from "../api/client";
 // How often an upload the worker is still reading is checked again.
 const PROCESSING_POLL_MS = 2000;
 
-function UploadRow({ orgId, upload }: { orgId: string; upload: Schemas["UploadOut"] }) {
+function UploadRow({
+  orgId,
+  upload,
+  onSolve,
+  solving,
+}: {
+  orgId: string;
+  upload: Schemas["UploadOut"];
+  onSolve: (uploadId: string) => void;
+  solving: boolean;
+}) {
+  const solvable =
+    upload.state === "ready" && upload.stops_in_review === 0 && upload.stops_snapped > 0;
   return (
     <tr>
       <td>{upload.file_name}</td>
@@ -22,7 +34,14 @@ function UploadRow({ orgId, upload }: { orgId: string; upload: Schemas["UploadOu
       </td>
       <td>{upload.stops_excluded}</td>
       <td>{upload.rows_rejected}</td>
-      <td className="error">{upload.failure_reason}</td>
+      <td>
+        {solvable && (
+          <button type="button" disabled={solving} onClick={() => onSolve(upload.id)}>
+            Solve
+          </button>
+        )}
+        <span className="error">{upload.failure_reason}</span>
+      </td>
     </tr>
   );
 }
@@ -43,6 +62,25 @@ export function RoutePage() {
       dataOf(await api.GET("/orgs/{org_id}/routes/{route_id}/uploads", { params: { path } })),
     refetchInterval: (query) =>
       query.state.data?.some((u) => u.state === "processing") ? PROCESSING_POLL_MS : false,
+  });
+  const runs = useQuery({
+    queryKey: ["runs", routeId],
+    queryFn: async () =>
+      dataOf(await api.GET("/orgs/{org_id}/routes/{route_id}/runs", { params: { path } })),
+    refetchInterval: (query) =>
+      query.state.data?.some((r) => r.state === "queued" || r.state === "running")
+        ? PROCESSING_POLL_MS
+        : false,
+  });
+  const solve = useMutation({
+    mutationFn: async (uploadId: string) =>
+      dataOf(
+        await api.POST("/orgs/{org_id}/routes/{route_id}/runs", {
+          params: { path },
+          body: { upload_id: uploadId, objective: "balanced-total" }, // the owner's choice (ADR-0003)
+        }),
+      ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["runs", routeId] }),
   });
   const [file, setFile] = useState<File | null>(null);
   const send = useMutation({
@@ -92,11 +130,31 @@ export function RoutePage() {
           </thead>
           <tbody>
             {uploads.data.map((upload) => (
-              <UploadRow key={upload.id} orgId={orgId} upload={upload} />
+              <UploadRow
+                key={upload.id}
+                orgId={orgId}
+                upload={upload}
+                onSolve={(id) => solve.mutate(id)}
+                solving={solve.isPending}
+              />
             ))}
           </tbody>
         </table>
       )}
+      {solve.isError && <p className="error">{solve.error.message}</p>}
+      <h2>Runs</h2>
+      {runs.data?.length === 0 && <p>No runs yet. Solve a stop list once its review is clear.</p>}
+      <ul>
+        {runs.data?.map((run) => (
+          <li key={run.id}>
+            <Link to={`/orgs/${orgId}/runs/${run.id}`}>
+              {new Date(run.created_at).toLocaleString()}: {run.trucks}{" "}
+              {run.trucks === 1 ? "truck" : "trucks"}, {run.state}
+            </Link>
+          </li>
+        ))}
+      </ul>
+      <h2>Upload a stop list</h2>
       <form onSubmit={submit}>
         <label>
           Stop list (CSV: stop_id, current_sequence, and lon and lat or an address)
