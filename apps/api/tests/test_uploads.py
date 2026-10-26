@@ -117,3 +117,62 @@ async def test_another_organizations_uploads_are_not_found(api):
         assert (await bob.get(path)).status_code == 404, path
     assert (await _upload(bob, bob_org, alice_route)).status_code == 404
     assert (await bob.get(f"/orgs/{bob_org}/routes/{bob_route}/uploads")).json() == []
+
+
+async def _in_review(api):
+    client, org, route = await _setup(api)
+    upload = (await _upload(client, org, route)).json()
+    await api.run_jobs()
+    base = f"/orgs/{org}/uploads/{upload['id']}"
+    (item,) = (await client.get(f"{base}/stops?state=review")).json()
+    return client, org, base, item
+
+
+async def test_a_planner_clears_a_review_item_by_picking_a_candidate_street(api):
+    client, _, base, item = await _in_review(api)
+    street = item["candidate_segment_ids"][0]
+    placed = await client.put(
+        f"{base}/stops/{item['stop_id']}/placement",
+        json={"segment_id": street, "curb_side": "left"},
+    )
+    assert placed.status_code == 200
+    assert (placed.json()["state"], placed.json()["segment_id"]) == ("snapped", street)
+    upload = (await client.get(base)).json()
+    assert (upload["stops_snapped"], upload["stops_in_review"]) == (5, 0)
+
+
+async def test_a_street_that_is_not_a_candidate_is_refused(api):
+    client, _, base, item = await _in_review(api)
+    response = await client.put(
+        f"{base}/stops/{item['stop_id']}/placement",
+        json={"segment_id": "somewhere-else", "curb_side": "right"},
+    )
+    assert response.status_code == 422
+
+
+async def test_a_stop_that_snapped_on_its_own_is_not_placed_again(api):
+    client, _, base, _ = await _in_review(api)
+    response = await client.put(
+        f"{base}/stops/s1/placement", json={"segment_id": "h-0-0", "curb_side": "right"}
+    )
+    assert response.status_code == 409
+
+
+async def test_a_planner_excludes_a_stop(api):
+    client, _, base, item = await _in_review(api)
+    response = await client.put(f"{base}/stops/{item['stop_id']}/exclusion")
+    assert response.status_code == 200
+    upload = (await client.get(base)).json()
+    assert (upload["stops_in_review"], upload["stops_excluded"]) == (0, 1)
+
+
+async def test_another_organizations_stops_cannot_be_placed_or_excluded(api):
+    _, _, base, item = await _in_review(api)
+    bob = await api.signed_in("bob@example.com")
+    bob_org = (await bob.post("/orgs", json={"name": "Bob Hauling"})).json()["id"]
+    upload_id = base.rsplit("/", 1)[1]
+    for prefix in (base, f"/orgs/{bob_org}/uploads/{upload_id}"):
+        stop = f"{prefix}/stops/{item['stop_id']}"
+        body = {"segment_id": item["candidate_segment_ids"][0], "curb_side": "left"}
+        assert (await bob.put(f"{stop}/placement", json=body)).status_code == 404
+        assert (await bob.put(f"{stop}/exclusion")).status_code == 404

@@ -12,6 +12,7 @@ from starboard.api.deps import Database, member
 from starboard.api.models import Membership, Role, Route, Stop, StopState, Upload, UploadState
 from starboard.api.queue import IMPORT_UPLOAD
 from starboard.api.scoping import in_org, one_in_org
+from starboard.solver.graph import CurbSide, Direction
 
 router = APIRouter(tags=["uploads"])
 
@@ -33,6 +34,7 @@ class UploadOut(BaseModel):
     rows_rejected: int
     stops_snapped: int
     stops_in_review: int
+    stops_excluded: int
     rejected_rows: list[RejectedRowOut]
     osm_snapshot: str | None
     failure_reason: str | None
@@ -52,6 +54,38 @@ class StopOut(BaseModel):
     candidate_segment_ids: list[str]
 
 
+class Placement(BaseModel):
+    """The street a stop is on, and its curb relative to the street's forward direction."""
+
+    segment_id: str
+    curb_side: CurbSide
+
+
+def _stop_out(s: Stop) -> StopOut:
+    return StopOut(
+        stop_id=s.stop_id,
+        current_sequence=s.current_sequence,
+        current_route_id=s.current_route_id,
+        street=s.street,
+        state=s.state,
+        segment_id=s.segment_id,
+        curb_side=s.curb_side,
+        review_reason=s.review_reason,
+        review_detail=s.review_detail,
+        candidate_segment_ids=s.candidate_segment_ids,
+    )
+
+
+async def _stop(db: Database, org_id: uuid.UUID, upload_id: uuid.UUID, stop_id: str) -> Stop:
+    await one_in_org(db, Upload, org_id, upload_id)
+    stop = await db.scalar(
+        in_org(Stop, org_id).where(Stop.upload_id == upload_id, Stop.stop_id == stop_id)
+    )
+    if stop is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no such stop")
+    return stop
+
+
 async def _out(db: Database, upload: Upload) -> UploadOut:
     rows = await db.execute(
         select(Stop.state, func.count())
@@ -68,6 +102,7 @@ async def _out(db: Database, upload: Upload) -> UploadOut:
         rows_rejected=upload.rows_rejected,
         stops_snapped=counts.get(StopState.SNAPPED, 0),
         stops_in_review=counts.get(StopState.REVIEW, 0),
+        stops_excluded=counts.get(StopState.EXCLUDED, 0),
         rejected_rows=[RejectedRowOut(**r) for r in upload.rejected_rows],
         osm_snapshot=upload.osm_snapshot,
         failure_reason=upload.failure_reason,
@@ -146,18 +181,47 @@ async def list_stops(
     if state is not None:
         query = query.where(Stop.state == state)
     stops = await db.scalars(query.order_by(Stop.current_sequence, Stop.stop_id))
-    return [
-        StopOut(
-            stop_id=s.stop_id,
-            current_sequence=s.current_sequence,
-            current_route_id=s.current_route_id,
-            street=s.street,
-            state=s.state,
-            segment_id=s.segment_id,
-            curb_side=s.curb_side,
-            review_reason=s.review_reason,
-            review_detail=s.review_detail,
-            candidate_segment_ids=s.candidate_segment_ids,
+    return [_stop_out(s) for s in stops]
+
+
+@router.put("/orgs/{org_id}/uploads/{upload_id}/stops/{stop_id}/placement")
+async def place_stop(
+    org_id: uuid.UUID,
+    upload_id: uuid.UUID,
+    stop_id: str,
+    body: Placement,
+    db: Database,
+    _: Planner,
+) -> StopOut:
+    """Clear a review item: the planner names the street and curb from its candidates.
+
+    A stop with no candidate street (outside the network) can only be excluded.
+    """
+    stop = await _stop(db, org_id, upload_id, stop_id)
+    if stop.review_reason is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "this stop snapped on its own")
+    if body.segment_id not in stop.candidate_segment_ids:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "the street must be one of the candidates"
         )
-        for s in stops
-    ]
+    stop.state = StopState.SNAPPED
+    stop.segment_id = body.segment_id
+    stop.curb_side = body.curb_side.value
+    forward = body.curb_side is CurbSide.RIGHT
+    stop.required_direction = (Direction.FORWARD if forward else Direction.REVERSE).value
+    # Worked out from the network when the stop is next solved (see the solve job).
+    stop.distance_along_m = None
+    stop.distance_from_centerline_m = None
+    await db.commit()
+    return _stop_out(stop)
+
+
+@router.put("/orgs/{org_id}/uploads/{upload_id}/stops/{stop_id}/exclusion")
+async def exclude_stop(
+    org_id: uuid.UUID, upload_id: uuid.UUID, stop_id: str, db: Database, _: Planner
+) -> StopOut:
+    """Leave a stop out of every run of this upload (a vacant lot, a cart picked up elsewhere)."""
+    stop = await _stop(db, org_id, upload_id, stop_id)
+    stop.state = StopState.EXCLUDED
+    await db.commit()
+    return _stop_out(stop)

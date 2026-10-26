@@ -42,6 +42,7 @@ class StopState(StrEnum):
     SNAPPED = "snapped"
     REVIEW = "review"
     REJECTED = "rejected"
+    EXCLUDED = "excluded"  # the planner left it out of every run
 
 
 class UploadState(StrEnum):
