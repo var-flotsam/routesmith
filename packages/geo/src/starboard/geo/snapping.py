@@ -88,6 +88,7 @@ class Snapper:
             LineString([self._projection.to_xy(p) for p in s.geometry]) for s in self._segments
         ]
         self._tree = STRtree(self._lines)
+        self._index_of = {s.segment_id: k for k, s in enumerate(self._segments)}
 
     def snap(self, stop: StopPoint) -> SnappedStop | ReviewItem:
         max_distance = defaults.SNAP_MAX_DISTANCE.value
@@ -155,6 +156,26 @@ class Snapper:
             distance_from_centerline_m=distance,
             side_of_forward=side,
             required_pass=Pass(best_id, direction),
+            street=stop.street,
+        )
+
+    def place(self, stop: StopPoint, segment_id: str, side: CurbSide) -> SnappedStop:
+        """The stop on the street and curb a planner chose; KeyError for an unknown street.
+
+        The planner's word settles the street and the side; the point only sets how
+        far along the street the cart stands.
+        """
+        index = self._index_of[segment_id]
+        line = self._lines[index]
+        point = Point(self._projection.to_xy(stop.location))
+        direction = Direction.FORWARD if side is CurbSide.RIGHT else Direction.REVERSE
+        return SnappedStop(
+            stop_id=stop.stop_id,
+            segment_id=segment_id,
+            distance_along_m=line.project(point),
+            distance_from_centerline_m=line.distance(point),
+            side_of_forward=side,
+            required_pass=Pass(segment_id, direction),
             street=stop.street,
         )
 

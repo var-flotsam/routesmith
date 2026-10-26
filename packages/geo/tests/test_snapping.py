@@ -133,3 +133,18 @@ def test_unserviceable_segments_are_never_snapped_to():
     result = snapper.snap(StopPoint("beside", at(-45.0, 150.0)))  # 5 m from it, 45 m from column 0
     assert isinstance(result, SnappedStop)
     assert result.segment_id.startswith("v-")
+
+
+def test_a_planner_placement_takes_the_chosen_street_and_side():
+    # A stop as near one street as another; the planner says which, and which curb.
+    stop = StopPoint("p", at(BLOCK_M / 2, BLOCK_M / 2))
+    placed = SNAPPER.place(stop, "h-0-0", CurbSide.LEFT)
+    assert placed.segment_id == "h-0-0"
+    assert placed.side_of_forward is CurbSide.LEFT
+    assert placed.required_pass.direction is Direction.REVERSE
+    assert placed.distance_along_m == pytest.approx(BLOCK_M / 2, abs=0.5)
+
+
+def test_a_placement_on_an_unknown_street_is_refused():
+    with pytest.raises(KeyError):
+        SNAPPER.place(StopPoint("p", at(10, 10)), "no-such-street", CurbSide.RIGHT)
