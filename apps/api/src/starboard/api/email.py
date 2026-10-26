@@ -1,10 +1,8 @@
 """Sending sign-in links. Deployed environments plug in a real mail service."""
 
-import logging
+import sys
 from dataclasses import dataclass, field
 from typing import Protocol
-
-_log = logging.getLogger(__name__)
 
 
 class EmailSender(Protocol):
@@ -12,10 +10,13 @@ class EmailSender(Protocol):
 
 
 class ConsoleEmailSender:
-    """Development: the link goes to the log instead of a mailbox."""
+    """Running locally: the link is printed in the API's output instead of mailed.
+
+    With Docker Compose, `docker compose logs api` shows it.
+    """
 
     async def send_sign_in_link(self, to: str, link: str) -> None:
-        _log.info("sign-in link for %s: %s", to, link)
+        print(f"Sign-in link for {to}: {link}", file=sys.stdout, flush=True)
 
 
 @dataclass

@@ -11,8 +11,12 @@ x-app: &app
     STARBOARD_UPLOAD_DIR: /app/cache/uploads
     STARBOARD_OSM_CACHE_DIR: /app/cache/osm
     STARBOARD_COOKIE_SECURE: "false"
+    # An OSM extract under ./cache to build street networks from, where Overpass is out of
+    # reach; set it in .env, e.g. /app/cache/osm/extracts/connecticut-latest.osm.pbf.
+    STARBOARD_OSM_EXTRACT: ${STARBOARD_OSM_EXTRACT:-}
   volumes:
-    - app-cache:/app/cache
+    # The checkout's cache/, so street networks and extracts the CLI fetched are reused.
+    - ./cache:/app/cache
 
 services:
   db:
@@ -66,6 +70,21 @@ services:
       redis:
         condition: service_healthy
 
+  web:
+    image: node:24-slim
+    working_dir: /app/apps/web
+    command: ["sh", "-c", "corepack enable && pnpm install --frozen-lockfile && pnpm dev --host"]
+    environment:
+      STARBOARD_API_TARGET: http://api:8000
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./apps/web:/app/apps/web
+      - web-modules:/app/apps/web/node_modules
+    depends_on:
+      - api
+
 volumes:
+  web-modules:
   db-data:
-  app-cache:
