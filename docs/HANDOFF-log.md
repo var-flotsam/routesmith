@@ -244,3 +244,42 @@
 
 - Restarting the PC so Docker works.
 - Merging #36 to #55 (say "merge" in the thread).
+
+## 2026-10-26 (phases 6 and 7, comparison view and exports)
+
+**Done**
+
+- #59 to #65 merged: encodings checked in CI, split view, playback, share
+  links (API and web), turn-by-turn steps, CSV/GPX/KML exports.
+- #66 merged: the printable driver route sheet (PDF), one section per truck.
+- #67 merged: exports download from the API, made on request and not stored
+  (ADR-0006); org-scoped, with the cross-org test. Not reached by share links.
+- #68 merged: download links on the run page.
+- #70: route sheet fixes from an independent review: the map on every page,
+  long stop ids, the footer, linear path drawing, OpenStreetMap credit.
+- #71: control characters (NUL above all) in names and addresses are a 422,
+  which ends the random schemathesis 500. A review found more: names now lose
+  the spaces around them before their length is checked, the email pattern
+  lists its spaces so the spec and the server agree on every character, and a
+  stop id path refuses only NUL, so a stop whose id holds a tab can still be
+  cleared from review.
+- #76: the route sheet embeds DejaVu Sans (ADR-0008), so street names beyond
+  Western European letters (Kalākaua, Łódź) print as named. Sheets are laid
+  out one at a time, because ReportLab is not safe to subset a font from two
+  threads at once.
+- The owner approved downloading and committing the DejaVu Sans fonts.
+- Docker Desktop and WSL2 work on the owner's machine; API tests now run
+  locally against PostGIS (`docker compose up -d db`, database
+  `starboard_test`).
+
+**Next**
+
+- A NUL inside an uploaded CSV should become a rejected row, not reach the
+  database in the import job.
+- OpenStreetMap credit in the GPX and KML files too.
+- The first full local run of the web app against the API.
+
+**Blocked on the owner**
+
+- Merging #70, #76 (stacked on #70), #71 and this log (say "merge" in the
+  thread).
