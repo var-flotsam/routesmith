@@ -2,6 +2,8 @@
 
 import pytest
 
+from starboard.api.models import Stop
+from starboard.geo.stop_file import MAX_ROUTE_ID_LENGTH, MAX_STOP_ID_LENGTH, MAX_STREET_LENGTH
 from starboard.geo.synthetic import Grid
 
 GRID = Grid()  # the grid the test harness builds the network from
@@ -57,6 +59,28 @@ async def test_an_upload_is_queued_then_snapped_by_the_worker(api):
     ]
     assert done["stops_snapped"] == 4
     assert done["stops_in_review"] == 1
+
+
+async def test_a_row_the_database_cannot_store_is_rejected_and_the_rest_imported(api):
+    client, org, route = await _setup(api)
+    nul = chr(0).encode()
+    body = _csv().replace(b"s2,2,", b"s" + nul + b"2,2,").replace(b"s3,3,", b"s" * 101 + b",3,")
+    upload = (await _upload(client, org, route, body)).json()
+    assert await api.run_jobs() == ["ready"]
+    done = (await client.get(f"/orgs/{org}/uploads/{upload['id']}")).json()
+    assert done["rejected_rows"] == [
+        {"line": 3, "reason": "holds a NUL character"},
+        {"line": 4, "reason": "stop_id is longer than 100 characters"},
+        {"line": 7, "reason": "current_sequence, lon or lat is not a number"},
+    ]
+    assert done["stops_snapped"] + done["stops_in_review"] == 3
+
+
+def test_the_stops_table_holds_whatever_a_stop_file_accepts():
+    columns = Stop.__table__.c
+    assert columns.stop_id.type.length == MAX_STOP_ID_LENGTH
+    assert columns.current_route_id.type.length == MAX_ROUTE_ID_LENGTH
+    assert columns.street.type.length == MAX_STREET_LENGTH
 
 
 async def test_the_review_queue_lists_stops_the_planner_must_place(api):

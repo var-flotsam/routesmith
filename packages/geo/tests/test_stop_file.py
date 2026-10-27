@@ -1,6 +1,12 @@
 from pathlib import Path
 
-from starboard.geo.stop_file import read_stop_file, read_stop_rows
+from starboard.geo.stop_file import (
+    MAX_ROUTE_ID_LENGTH,
+    MAX_STOP_ID_LENGTH,
+    MAX_STREET_LENGTH,
+    read_stop_file,
+    read_stop_rows,
+)
 
 
 def write(tmp_path: Path, text: str) -> Path:
@@ -38,6 +44,30 @@ def test_bad_rows_are_rejected_with_a_reason_not_raised(tmp_path):
         (4, "current_sequence, lon or lat is not a number"),
         (5, "lon or lat is out of range"),
         (6, "duplicate stop_id a"),
+    ]
+
+
+def test_a_damaged_or_oversized_row_is_rejected_and_the_rest_are_read():
+    nul = chr(0)
+    lines = [
+        "stop_id,current_sequence,street,route_id,lon,lat",
+        f"a{nul}b,1,,A,-73.0,41.0",
+        f"c,2,Elm St,A,-73.0,41.0,{nul}",  # in a cell past the header's columns
+        '"' + "x" * 200_000 + '",3,,A,-73.0,41.0',  # over the csv module's limit
+        "s" * (MAX_STOP_ID_LENGTH + 1) + ",4,,A,-73.0,41.0",
+        "e,5,," + "r" * (MAX_ROUTE_ID_LENGTH + 1) + ",-73.0,41.0",
+        "f,6," + "m" * (MAX_STREET_LENGTH + 1) + ",A,-73.0,41.0",
+        "g,7,Elm St,A,-73.0,41.0",
+    ]
+    stop_file = read_stop_rows(lines)
+    assert [s.stop_id for s in stop_file.stops] == ["g"]
+    reasons = [(r.line_number, r.reason) for r in stop_file.rejected]
+    assert reasons[:2] == [(2, "holds a NUL character"), (3, "holds a NUL character")]
+    assert reasons[2][0] == 4 and reasons[2][1].startswith("unreadable: ")
+    assert reasons[3:] == [
+        (5, f"stop_id is longer than {MAX_STOP_ID_LENGTH} characters"),
+        (6, f"route_id is longer than {MAX_ROUTE_ID_LENGTH} characters"),
+        (7, f"street is longer than {MAX_STREET_LENGTH} characters"),
     ]
 
 
