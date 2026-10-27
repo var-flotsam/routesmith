@@ -196,7 +196,7 @@
         "properties": {
           "email": {
             "maxLength": 320,
-            "pattern": "^[^@\\s]+@[^@\\s]+$",
+            "pattern": "^[^@\\x00-\\x1f\\x7f\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff]+@[^@\\x00-\\x1f\\x7f\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff]+$",
             "title": "Email",
             "type": "string"
           }
@@ -261,7 +261,7 @@
         "properties": {
           "email": {
             "maxLength": 320,
-            "pattern": "^[^@\\s]+@[^@\\s]+$",
+            "pattern": "^[^@\\x00-\\x1f\\x7f\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff]+@[^@\\x00-\\x1f\\x7f\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff]+$",
             "title": "Email",
             "type": "string"
           },
@@ -281,6 +281,7 @@
           "name": {
             "maxLength": 200,
             "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
             "title": "Name",
             "type": "string"
           }
@@ -536,6 +537,7 @@
               {
                 "maxLength": 200,
                 "minLength": 1,
+                "pattern": "^[^\\x00-\\x1f\\x7f]*$",
                 "type": "string"
               },
               {
@@ -592,6 +594,7 @@
           "name": {
             "maxLength": 200,
             "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
             "title": "Name",
             "type": "string"
           },
@@ -653,8 +656,6 @@
             "title": "Max Route Hours"
           },
           "name": {
-            "maxLength": 200,
-            "minLength": 1,
             "title": "Name",
             "type": "string"
           },
@@ -3311,6 +3312,7 @@
             "name": "stop_id",
             "required": true,
             "schema": {
+              "pattern": "^[^\\x00]*$",
               "title": "Stop Id",
               "type": "string"
             }
@@ -3408,6 +3410,7 @@
             "name": "stop_id",
             "required": true,
             "schema": {
+              "pattern": "^[^\\x00]*$",
               "title": "Stop Id",
               "type": "string"
             }

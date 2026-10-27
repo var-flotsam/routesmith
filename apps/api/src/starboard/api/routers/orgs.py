@@ -4,12 +4,13 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from starboard.api.deps import IN_ORG, CurrentUser, Database, member
 from starboard.api.models import Membership, Organization, Role, User
 from starboard.api.security import EmailAddress, normalized_email
+from starboard.api.text import Name
 
 router = APIRouter(
     tags=["organizations"],
@@ -18,7 +19,7 @@ router = APIRouter(
 
 
 class NewOrganization(BaseModel):
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
 
 
 class OrganizationOut(BaseModel):
@@ -42,7 +43,7 @@ async def create_organization(
     body: NewOrganization, user: CurrentUser, db: Database
 ) -> OrganizationOut:
     """A new organization, with the caller as its owner."""
-    org = Organization(name=body.name.strip())
+    org = Organization(name=body.name)
     db.add(org)
     await db.flush()
     db.add(Membership(org_id=org.id, user_id=user.id, role=Role.OWNER))
