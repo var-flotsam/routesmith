@@ -371,3 +371,35 @@
 **Blocked on the owner**
 
 - GitHub and Google OAuth client registrations.
+
+## 2026-10-27 (README checked against the code)
+
+**Done**
+
+- #85: every statement in the README checked against `main` and fixed where it
+  was wrong or overstated. The CLI commands pass `--route data/demo/route.json`
+  (without it `optimize` refuses to run and `score` drives no yard or disposal
+  legs, so it does not match the table), and the README says the CLI reads
+  only stops with lon/lat and needs Overpass or `--osm-extract`. The intro says
+  what the solver minimizes (route time, with a time cost on every turn) and
+  that it reports the best order found with a bound, instead of "keeps left
+  turns and U-turns rare". The demo scorecard has all 14 rows the demo page
+  shows, with what the times are made of. New: a Status section (runs locally,
+  not hosted), splitting an area among several trucks, the stop-list format,
+  Linux `cache/` permissions, and where local data is kept. The CI paragraph
+  names what CI runs (`-m "not demo and not benchmark"`), the licence line
+  names the ODbL demo result and the route sheet fonts, and the basemap credit
+  sits under the screenshot, which crops it.
+
+**Next**
+
+- `docs/CLEANROOM.md` lists OpenAddresses and Nominatim as sources; the demo
+  uses the CT 9-1-1 address points and geocoding uses the US Census geocoder.
+- Turn restrictions through a way, and timed ones, are not read from OSM;
+  `osm.py` counts and drops them without saying so.
+- Retake `docs/media/demo-byram.png` with the whole map attribution in frame.
+- Phase 8 (HANDOFF §5): loading states and the faster review queue.
+
+**Blocked on the owner**
+
+- GitHub and Google OAuth client registrations.
