@@ -3,7 +3,10 @@ name = "starboard-export"
 version = "0.0.0"
 description = "Driver route sheet PDF, CSV and GPX/KML exports"
 requires-python = ">=3.12,<3.13"
-license = "FSL-1.1-ALv2"
+# The code is FSL; the route sheet's fonts in src/starboard/export/fonts keep their own
+# licence (ADR-0008), which has no SPDX id for its Arev part.
+license = "FSL-1.1-ALv2 AND Bitstream-Vera AND LicenseRef-Arev-Fonts"
+license-files = ["src/starboard/export/fonts/LICENSE"]
 dependencies = [
     "reportlab>=4.2",
     "starboard-solver",

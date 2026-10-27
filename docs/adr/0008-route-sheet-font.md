@@ -42,6 +42,12 @@ scripts.
   subsets of the two fonts.
 - DejaVu Sans is wider than Helvetica, so the steps table's columns are sized
   for it: each heading, and a step number up to four digits, fits its column.
+- ReportLab keeps one copy of each font for the whole process and moves a single
+  read position through it while subsetting, so two sheets laid out at once
+  could read each other's glyphs. The route sheet is laid out one at a time,
+  under a lock; a sheet takes well under a second (ADR-0006).
 - The `fonts/` folder is not under FSL-1.1-ALv2. Its `LICENSE` travels with the
   fonts; they may not be changed without renaming, and may not be sold on their
-  own. ADR-0001 records the exception.
+  own. ADR-0001 records the exception, and `starboard-export` declares its
+  licence as `FSL-1.1-ALv2 AND Bitstream-Vera AND LicenseRef-Arev-Fonts`, with
+  the font licence among its licence files.

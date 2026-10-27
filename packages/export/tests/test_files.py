@@ -9,6 +9,8 @@ import io
 import itertools
 import os
 import re
+import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -139,6 +141,21 @@ def test_a_letter_the_font_lacks_never_stops_the_sheet():
     steps = (Step("depart", "中山路", 50.0, ()),)  # a street named in Chinese
     pages = _pages(route_sheet_pdf(_with_second_route(steps=steps)))
     assert len(pages) == 2 and "Leave onto" in pages[1]
+
+
+def test_sheets_laid_out_at_the_same_time_are_each_whole():
+    # The API lays sheets out in worker threads. A short switch interval makes threads
+    # interleave far more often than they would by chance.
+    run = _sample()
+    expected = route_sheet_pdf(run)
+    interval = sys.getswitchinterval()
+    sys.setswitchinterval(1e-5)
+    try:
+        with ThreadPoolExecutor(8) as pool:
+            sheets = list(pool.map(lambda _: route_sheet_pdf(run), range(64)))
+    finally:
+        sys.setswitchinterval(interval)
+    assert all(sheet == expected for sheet in sheets)
 
 
 def _text_starts(pdf: bytes, page: int) -> dict[str, float]:

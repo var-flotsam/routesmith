@@ -10,8 +10,9 @@ competing service.
 
 ## Decision
 
-The whole repository is licensed under the Functional Source License 1.1
-with the Apache 2.0 future licence (FSL-1.1-ALv2), as `LICENSE.md` states.
+The repository is licensed under the Functional Source License 1.1 with the
+Apache 2.0 future licence (FSL-1.1-ALv2), as `LICENSE.md` states, except the
+folders named under Consequences, which keep their own licences.
 Each version becomes available under Apache 2.0 two years after it is made
 available. The copyright holder is "var-flotsam".
 

@@ -17,11 +17,14 @@ The sheet is set in DejaVu Sans (https://dejavu-fonts.github.io/), kept in `font
 under its own licence, and embedded in the PDF as a subset of the letters it uses. PDF
 viewers' built-in fonts stop at Western European letters; DejaVu Sans also covers the
 rest of the Latin alphabets, Greek and Cyrillic, so Kalākaua Ave and Łódź Rd print as
-named. A letter it lacks prints as an empty box, and the sheet still prints.
+named. A letter it lacks prints as an empty box, and the sheet still prints. ReportLab
+holds one copy of each font for the whole process and is not safe to subset it from two
+threads at once, so one sheet is laid out at a time; a sheet takes well under a second.
 """
 
 import io
 import math
+import threading
 from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
@@ -72,6 +75,7 @@ _STOP_ID_CHARACTERS_SHOWN = 24
 
 _FONTS = Path(__file__).parent / "fonts"
 _FONT, _BOLD_FONT = "DejaVuSans", "DejaVuSans-Bold"  # named as their files in `fonts/`
+_ONE_SHEET_AT_A_TIME = threading.Lock()
 _SAMPLE_STYLES = getSampleStyleSheet()
 _TITLE = ParagraphStyle("title", parent=_SAMPLE_STYLES["Title"], fontName=_BOLD_FONT)
 # 13 point: larger than a document's usual 10, for reading at arm's length in a cab.
@@ -255,7 +259,12 @@ def _steps_table(route: TruckRoute) -> Table:
 
 def route_sheet_pdf(run: RunExport) -> bytes:
     """One section per truck, each starting on a new page, as US Letter."""
-    _register_fonts()
+    with _ONE_SHEET_AT_A_TIME:
+        _register_fonts()
+        return _laid_out(run)
+
+
+def _laid_out(run: RunExport) -> bytes:
     pages = _Pages(run.route_name, run.routes)
     story: list[Flowable] = []
     for number, route in enumerate(run.routes, start=1):
