@@ -147,6 +147,16 @@
         "title": "CurrentSide",
         "type": "object"
       },
+      "ExportFile": {
+        "enum": [
+          "route-sheet.pdf",
+          "stops.csv",
+          "routes.gpx",
+          "routes.kml"
+        ],
+        "title": "ExportFile",
+        "type": "string"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -2647,6 +2657,115 @@
         "summary": "Read Run",
         "tags": [
           "runs"
+        ]
+      }
+    },
+    "/orgs/{org_id}/runs/{run_id}/exports/{file}": {
+      "get": {
+        "description": "One of the run's exports, as a download. 404 until the run has succeeded.",
+        "operationId": "download_export_orgs__org_id__runs__run_id__exports__file__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "file",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ExportFile"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "starboard_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Starboard Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/gpx+xml": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "application/pdf": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "application/vnd.google-earth.kml+xml": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "the file, to save: a PDF route sheet, a CSV of stops, GPX or KML"
+          },
+          "400": {
+            "description": "the request body could not be read"
+          },
+          "401": {
+            "description": "not signed in"
+          },
+          "403": {
+            "description": "the caller's role is too low for this"
+          },
+          "404": {
+            "description": "no such organization for the caller, or no such row in it"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Export",
+        "tags": [
+          "exports"
         ]
       }
     },
