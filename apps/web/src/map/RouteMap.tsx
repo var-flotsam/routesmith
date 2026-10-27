@@ -4,7 +4,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef } from "react";
 
 import type { Point } from "./playback";
-import { BASEMAP_STYLE, CURRENT_COLOUR, truckColour } from "./style";
+import { BASEMAP_STYLE, CURRENT_COLOUR, PLAIN_STYLE, truckColour } from "./style";
 
 export type Layer = "current" | "optimized";
 
@@ -13,6 +13,14 @@ export type View = "overlay" | "split";
 
 // Room around the routes when the map first fits them.
 const FIT_PADDING_PX = 40;
+
+// On a touch screen one finger scrolls the page and two move the map, so a map never
+// traps someone scrolling past it.
+const TOUCH_SCREEN = "(pointer: coarse)";
+
+function onTouchScreen(): boolean {
+  return typeof window.matchMedia === "function" && window.matchMedia(TOUCH_SCREEN).matches;
+}
 
 type Path = [number, number][];
 
@@ -56,7 +64,19 @@ function routeMap(
   current: Path[],
   optimized: Path[],
 ): maplibregl.Map {
-  const map = new maplibregl.Map({ container, style: BASEMAP_STYLE });
+  const map = new maplibregl.Map({
+    container,
+    style: BASEMAP_STYLE,
+    cooperativeGestures: onTouchScreen(),
+  });
+  let styled = false;
+  map.once("style.load", () => (styled = true));
+  map.on("error", (event) => {
+    console.error(event.error);
+    if (styled) return; // a tile that failed after the style loaded leaves the routes drawn
+    styled = true;
+    map.setStyle(PLAIN_STYLE, { diff: false });
+  });
   const bounds = new maplibregl.LngLatBounds();
   for (const path of [...current, ...optimized]) for (const point of path) bounds.extend(point);
   if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: FIT_PADDING_PX, animate: false });
@@ -176,10 +196,18 @@ export function RouteMap({
   if (view === "split") {
     return (
       <div className="split">
-        <div ref={left} className="map large" aria-label="Map of the current routes" />
-        <div ref={right} className="map large" aria-label="Map of the optimized routes" />
+        <figure>
+          <figcaption>Current</figcaption>
+          <div ref={left} className="map large" role="region" aria-label="Current routes" />
+        </figure>
+        <figure>
+          <figcaption>Optimized</figcaption>
+          <div ref={right} className="map large" role="region" aria-label="Optimized routes" />
+        </figure>
       </div>
     );
   }
-  return <div ref={left} className="map large" aria-label="Map of current and optimized routes" />;
+  return (
+    <div ref={left} className="map large" role="region" aria-label="Current and optimized routes" />
+  );
 }
