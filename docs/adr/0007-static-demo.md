@@ -48,9 +48,6 @@ everything on it comes from one API answer, `SharedRun`.
 - The product itself stays undeployed. This ADR changes the 2026-10-26 decision
   only for this static page.
 
-The builder and the committed result land first; the web build, the workflow and
-the CI step follow in the next pull requests.
-
 ## Consequences
 
 - The demo costs nothing to host, and nothing is solved in a visitor's browser.

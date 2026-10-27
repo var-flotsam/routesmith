@@ -121,3 +121,6 @@ jobs:
           git diff --exit-code -- apps/web/openapi.json apps/web/src/api/schema.d.ts
       - run: pnpm lint && pnpm typecheck && pnpm test && pnpm build
         working-directory: apps/web
+      # The static demo (ADR-0007) builds from the committed demo result, and fails without it.
+      - run: pnpm build:demo
+        working-directory: apps/web

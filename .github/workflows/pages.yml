@@ -1,0 +1,57 @@
+name: pages
+
+# The static demo (docs/adr/0007-static-demo.md) on GitHub Pages: the web app's demo build,
+# showing the committed demo result. It deploys from main once the repository variable
+# PAGES_ENABLED is "true". To turn it on: Settings > Pages > Source: GitHub Actions, set the
+# variable, then run this workflow once from the Actions tab (setting a variable starts
+# nothing). Until then it does nothing, and CI still builds the demo on every PR. Other
+# branches are skipped here; what stops them deploying is the github-pages environment's
+# deployment-branch rule, which should stay set to main.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: vars.PAGES_ENABLED == 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: corepack enable
+      # pnpm reads its version from apps/web/package.json, so it runs from there.
+      - run: pnpm install --frozen-lockfile
+        working-directory: apps/web
+      - run: pnpm build:demo
+        working-directory: apps/web
+        env:
+          STARBOARD_WEB_BASE: /${{ github.event.repository.name }}/
+          # The page links to the repository only when visitors can open it.
+          VITE_REPOSITORY_URL: ${{ !github.event.repository.private && format('{0}/{1}', github.server_url, github.repository) || '' }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

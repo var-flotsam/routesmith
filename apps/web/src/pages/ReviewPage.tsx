@@ -3,23 +3,13 @@ import { lazy, Suspense, useState } from "react";
 import { Link, useParams } from "react-router";
 
 import { api, dataOf, type Schemas } from "../api/client";
+import { REASONS } from "./reasons";
 
 // The map library is large and needs WebGL, so it loads only when a map is shown.
 const ReviewMap = lazy(async () => ({ default: (await import("../map/ReviewMap")).ReviewMap }));
 
 type Stop = Schemas["StopOut"];
 type Side = Schemas["CurbSide"];
-
-// What each review reason means for the planner.
-const REASONS: Record<string, string> = {
-  outside_network: "No street near enough",
-  ambiguous_street: "About as near one street as another",
-  side_undetermined: "On the centre line; side of street unclear",
-  wrong_side_of_one_way: "On the left of a one-way street",
-  address_not_found: "Address not found",
-  address_ambiguous: "Address matches more than one place",
-  address_inexact: "Address found only after correcting it",
-};
 
 const OTHER_SIDE: Record<Side, Side> = { left: "right", right: "left" };
 

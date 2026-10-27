@@ -201,7 +201,9 @@ Each phase ends with a PR, green CI, and a line in `docs/HANDOFF-log.md`.
 5. **Web v1.** Sign-in, route setup, upload with column mapping, review queue
    on the map, run status, current-route map, stop table, demo route
    preloaded. It runs locally under Docker Compose; deploying to a public URL
-   waits until the owner wants one (owner, 2026-10-26).
+   waits until the owner wants one (owner, 2026-10-26). The one exception is a
+   static page of the demo route's precomputed result on GitHub Pages
+   (`docs/adr/0007-static-demo.md`).
 6. **Comparison view.** Optimized layer, split view, playback, scorecard
    deltas, permalinks, share links.
 7. **Exports.** PDF route sheet, CSV, GPX/KML.

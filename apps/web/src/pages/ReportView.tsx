@@ -90,17 +90,39 @@ function Comparison({ current, optimized }: { current: Scorecard; optimized: Sco
   );
 }
 
+// The area's rows that sum up a result, in ROWS's order.
+const HEADLINE_KEYS: (keyof Scorecard)[] = ["route_time_s", "wrong_side_pickups"];
+
+/** The result in a line, for above the map: the headline rows, current then optimized. */
+export function Headline({ report }: { report: Schemas["RunReport"] }) {
+  const current = report.current.area;
+  const optimized = report.optimized.area;
+  return (
+    <p className="headline">
+      {ROWS.filter(({ key }) => HEADLINE_KEYS.includes(key))
+        .map(
+          ({ label, key, unit }) =>
+            `${label}: ${shown(current[key], unit)} current, ${shown(optimized[key], unit)} ` +
+            `optimized (${change(current[key], optimized[key], unit)}).`,
+        )
+        .join(" ")}
+    </p>
+  );
+}
+
 /** A run's result: the map with playback, the area's scorecards, each optimized route,
  * and stops no route can serve. `children` go after the route table. */
 export function ReportView({
   report,
+  initialView = "overlay",
   children,
 }: {
   report: Schemas["RunReport"];
+  initialView?: View;
   children?: ReactNode;
 }) {
   const [layers, setLayers] = useState<Set<Layer>>(new Set(["current", "optimized"]));
-  const [view, setView] = useState<View>("overlay");
+  const [view, setView] = useState<View>(initialView);
   const [trucks, setTrucks] = useState<Trucks>({ current: [], optimized: [] });
   const onTrucks = useCallback((next: Trucks) => setTrucks(next), []);
   function toggle(layer: Layer) {
