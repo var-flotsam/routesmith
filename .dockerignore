@@ -8,6 +8,7 @@ data/osm
 **/.ruff_cache
 **/.hypothesis
 apps/web/node_modules
+apps/web/.pnpm-store
 .env
 .env.*
 CLAUDE.local.md

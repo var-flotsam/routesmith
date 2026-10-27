@@ -206,6 +206,15 @@ test("a run that is still solving offers nothing to download", async () => {
   expect(screen.queryByRole("heading", { name: "Downloads" })).not.toBeInTheDocument();
 });
 
+test("a run for one truck says truck", async () => {
+  fakeApi({
+    "GET /me": { status: 200, body: ME },
+    "GET /orgs/o1/runs/run1": { status: 200, body: { ...RUN, state: "queued", trucks: 1 } },
+  });
+  renderApp("/orgs/o1/runs/run1");
+  expect(await screen.findByText("Solving for 1 truck (queued)…")).toBeInTheDocument();
+});
+
 test("a failed run says why", async () => {
   fakeApi({
     "GET /me": { status: 200, body: ME },
