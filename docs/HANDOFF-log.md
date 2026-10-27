@@ -314,3 +314,33 @@
 - Publishing the demo: make the repository public; Settings > Pages >
   Source: GitHub Actions; set `PAGES_ENABLED` to `true`; run the `pages`
   workflow once.
+
+## 2026-10-26 (evening: CI, the route sheet font, the first local run)
+
+**Done**
+
+- #70, #76, #71 and #72 merged on the owner's "merge". Main's CI is green.
+- #77 merged: a stop row the database cannot store (a NUL character, a stop id or
+  route id over 100 characters, a street over 200) or that the csv module
+  cannot read is a rejected row; before, it failed the whole upload.
+- #79 merged: the GPX and KML files credit OpenStreetMap and the ODbL, as the route
+  sheet does.
+- The first full local run, on the owner's machine under Docker Compose:
+  sign-in, the demo's 754 stops imported (about 2 minutes, mostly fetching
+  streets), review cleared, a solve (about 2 minutes; route time 7.77 h to
+  4.70 h), all four downloads, and a share link. It all works.
+- #80 merged: fixes what the run turned up: pnpm's 213 MB store landed in the
+  checkout and the image's build context (now a volume), cramped tables, and
+  "Solving for 1 trucks".
+
+**Next**
+
+- Phase 8 (HANDOFF §5). From the local run: loading states (the route page
+  shows empty headings while it loads), and a faster review queue (clearing
+  44 stops one at a time is slow; next-unresolved and bulk accept).
+- GitHub and Google OAuth. They need client registrations under the owner's
+  accounts.
+
+**Blocked on the owner**
+
+- Merging this log (say "merge" in the thread).
