@@ -351,3 +351,25 @@
 
 - Merging this update to the log (say "merge" in the thread).
 - GitHub and Google OAuth: client registrations under the owner's accounts.
+
+## 2026-10-27 (the README as the front page)
+
+**Done**
+
+- README rewritten for a visitor who arrives from the demo link: CI, Pages and
+  licence badges; a link to the live demo and a screenshot of it; the demo's
+  scorecard (current vs optimized, from `data/demo/result/shared-run.json`); a
+  diagram and a short account of how geo, solver and export fit together; the
+  CLI path for running without Docker; the test and CI commands; a layout
+  table. The "Run it locally" steps are unchanged. Screenshot at
+  `docs/media/demo-byram.png`.
+
+**Next**
+
+- Phase 8 (HANDOFF §5): loading states and the faster review queue, as before.
+- A short GIF of the demo's day animation for the README, if the owner wants it.
+
+**Blocked on the owner**
+
+- Merging this PR (say "merge" in the thread).
+- GitHub and Google OAuth client registrations, as before.
