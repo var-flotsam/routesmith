@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document><name>Byram &amp; Mill</name>
+    <description>Streets © OpenStreetMap contributors, under the Open Database Licence (openstreetmap.org/copyright), as of 2026-10-01.</description>
     <Placemark><name>Byram &amp; Mill, route 1</name>
       <LineString><coordinates>-73.650000,41.000000 -73.649000,41.000000 -73.649000,41.001000</coordinates></LineString>
     </Placemark>
