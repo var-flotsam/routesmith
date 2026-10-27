@@ -3,3 +3,5 @@
 .githooks/* text eol=lf
 # Export snapshots are compared byte for byte: never convert their line endings.
 packages/export/tests/snapshots/** -text
+# Fonts are shipped exactly as released.
+*.ttf binary

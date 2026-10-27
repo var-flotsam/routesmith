@@ -3,7 +3,7 @@
 import subprocess
 import sys
 
-BINARY = (".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".pbf", ".woff", ".woff2")
+BINARY = (".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".pbf", ".ttf", ".woff", ".woff2")
 
 
 def main() -> int:

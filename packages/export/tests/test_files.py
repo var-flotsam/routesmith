@@ -6,11 +6,16 @@ Run with UPDATE_SNAPSHOTS=1 to write new snapshots after an intended change.
 import dataclasses
 import importlib.util
 import io
+import itertools
 import os
+import re
+import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 from pypdf import PdfReader
+from reportlab.pdfbase.pdfmetrics import stringWidth
 
 from starboard.export.files import routes_gpx, routes_kml, stops_csv
 from starboard.export.model import RunExport, Step
@@ -115,6 +120,65 @@ def test_a_long_route_name_leaves_the_truck_and_page_on_the_page():
     footer = _pages(route_sheet_pdf(run))[0].splitlines()[-2:]
     assert footer[0].startswith("North North") and footer[0].endswith("…")
     assert footer[1] == "Truck 1 of 2, page 1"
+
+
+def test_street_names_beyond_western_european_letters_print_as_named():
+    steps = (Step("depart", "Kalākaua Ave", 120.0, ()), Step("left", "Łódź Rd", 80.0, ()))
+    pages = _pages(route_sheet_pdf(_with_second_route(steps=steps)))
+    assert "Leave onto Kalākaua Ave" in pages[1]
+    assert "Turn left onto Łódź Rd" in pages[1]
+
+
+def test_the_sheet_carries_its_own_fonts():
+    pdf = route_sheet_pdf(_sample())
+    fonts = set(re.findall(rb"/BaseFont\s*/([^\s/]+)", pdf))
+    # A subset of each font, embedded: no font is left to the printer to stand in for.
+    assert fonts == {b"AAAAAA+DejaVuSans", b"AAAAAA+DejaVuSans-Bold"}
+    assert pdf.count(b"/FontFile2") == len(fonts)
+
+
+def test_a_letter_the_font_lacks_never_stops_the_sheet():
+    steps = (Step("depart", "中山路", 50.0, ()),)  # a street named in Chinese
+    pages = _pages(route_sheet_pdf(_with_second_route(steps=steps)))
+    assert len(pages) == 2 and "Leave onto" in pages[1]
+
+
+def test_sheets_laid_out_at_the_same_time_are_each_whole():
+    # The API lays sheets out in worker threads. A short switch interval makes threads
+    # interleave far more often than they would by chance.
+    run = _sample()
+    expected = route_sheet_pdf(run)
+    interval = sys.getswitchinterval()
+    sys.setswitchinterval(1e-5)
+    try:
+        with ThreadPoolExecutor(8) as pool:
+            sheets = list(pool.map(lambda _: route_sheet_pdf(run), range(64)))
+    finally:
+        sys.setswitchinterval(interval)
+    assert all(sheet == expected for sheet in sheets)
+
+
+def _text_starts(pdf: bytes, page: int) -> dict[str, float]:
+    """Where each piece of text on a page first starts, in points from its left edge."""
+    starts: dict[str, float] = {}
+
+    def visit(text, cm, tm, font, size):
+        if text.strip():
+            starts.setdefault(text.strip(), tm[4] * cm[0] + cm[4])
+
+    PdfReader(io.BytesIO(pdf)).pages[page].extract_text(visitor_text=visit)
+    return starts
+
+
+def test_the_headings_and_a_four_digit_step_number_fit_their_columns():
+    steps = tuple(Step("right", "Mill St", 50.0, ()) for _ in range(1000))
+    pdf = route_sheet_pdf(_with_second_route(steps=steps))
+    padding = 2 * 6  # ReportLab's default: 6 points inside each side of a cell
+    heading = _text_starts(pdf, 1)
+    for this, after in itertools.pairwise(["#", "Do this", "Distance", "Carts"]):
+        assert heading[this] + stringWidth(this, "DejaVuSans-Bold", 13) <= heading[after] - padding
+    last = _text_starts(pdf, len(_pages(pdf)) - 1)
+    assert last["1000"] + stringWidth("1000", "DejaVuSans", 13) <= heading["Do this"] - padding
 
 
 def test_long_stop_ids_print_shortened_and_never_stop_the_sheet():
