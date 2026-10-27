@@ -27,8 +27,8 @@ vi.mock("../map/RouteMap", () => ({
 const ROUTE = {
   id: "r1",
   name: "Byram",
-  yard: { lon: -73.6, lat: 41.0 },
-  disposal: { lon: -73.6, lat: 41.0 },
+  yard: { lon: -73.6, lat: 41.0, address: null },
+  disposal: { lon: -73.6, lat: 41.0, address: null },
   capacity_carts: 420,
   max_route_hours: null,
 };

@@ -26,8 +26,16 @@ from starboard.api.queue import RecordingQueue
 from starboard.api.security import new_token, token_hash
 from starboard.api.settings import Settings
 from starboard.api.storage import LocalObjectStore
+from starboard.geo.geocoding import FoundPlace
 
 DATABASE_URL = os.environ.get("STARBOARD_TEST_DATABASE_URL")
+
+
+class _NoPlaces:
+    """An address finder that finds nothing, so no generated request reaches the Census."""
+
+    def find(self, address: str) -> list[FoundPlace]:
+        return []
 
 
 async def _owner() -> tuple[str, uuid.UUID]:
@@ -60,6 +68,7 @@ def api_schema(migrated: None, tmp_path: Path) -> schemathesis.BaseSchema:
         RecordingEmailSender(),
         LocalObjectStore(tmp_path / "uploads"),
         RecordingQueue(),
+        _NoPlaces(),
     )
     return schemathesis.openapi.from_asgi("/openapi.json", app)
 

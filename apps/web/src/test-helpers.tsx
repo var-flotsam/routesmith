@@ -7,7 +7,7 @@ import { App } from "./App";
 
 type Answer = { status: number; body: unknown };
 
-export type Call = { key: string; body: unknown; contentType: string | null };
+export type Call = { key: string; body: unknown; contentType: string | null; query: string };
 
 /** Answers API calls by "METHOD /path", and records each request; a list answers in turn. */
 export function fakeApi(answers: Record<string, Answer | Answer[]>): Call[] {
@@ -16,7 +16,9 @@ export function fakeApi(answers: Record<string, Answer | Answer[]>): Call[] {
     let key: string;
     let body: unknown;
     let contentType: string | null;
+    let query = "";
     if (input instanceof Request) {
+      query = new URL(input.url).search;
       key = `${input.method} ${new URL(input.url).pathname.replace(/^\/api/, "")}`;
       contentType = input.headers.get("Content-Type");
       const text = await input.text();
@@ -27,7 +29,7 @@ export function fakeApi(answers: Record<string, Answer | Answer[]>): Call[] {
       body = init?.body;
       contentType = body instanceof FormData ? "multipart/form-data" : null;
     }
-    calls.push({ key, body, contentType });
+    calls.push({ key, body, contentType, query });
     const listed = answers[key];
     const answer = Array.isArray(listed) ? (listed.length > 1 ? listed.shift() : listed[0]) : listed;
     if (answer === undefined) throw new Error(`no fake answer for ${key}`);

@@ -22,7 +22,13 @@ from starboard.api.models import Base
 from starboard.api.queue import IMPORT_UPLOAD, SOLVE_RUN, RecordingQueue
 from starboard.api.settings import Settings
 from starboard.api.storage import LocalObjectStore
-from starboard.geo.geocoding import Address, GeocodeOutcome, GeocodeQuality
+from starboard.geo.geocoding import (
+    Address,
+    FoundPlace,
+    GeocodeOutcome,
+    GeocodeQuality,
+    GeocoderUnavailableError,
+)
 from starboard.geo.state_graph import build_state_graph
 from starboard.geo.synthetic import Grid
 from starboard.solver.graph import StateGraph
@@ -61,8 +67,23 @@ GRID = Grid()
 
 
 class FakeGeocoder:
-    """Tests: addresses "x,y" on the grid are found there; "maybe x,y" is an inexact match;
-    "twice" is ambiguous; anything else is not found."""
+    """Tests: addresses "x y" on the grid are found there; "maybe x y" is an inexact match;
+    "twice" is ambiguous; anything else is not found. A one-line search finds the same,
+    with two places for "twice", and "down" stands for the service not answering."""
+
+    def find(self, address: str) -> list[FoundPlace]:
+        if address == "down":
+            raise GeocoderUnavailableError("the fake geocoder is down")
+        if address == "twice":
+            return [
+                FoundPlace("1 TWICE ST, A", GRID.at(0, 0)),
+                FoundPlace("1 TWICE ST, B", GRID.at(100, 0)),
+            ]
+        try:
+            x, y = (float(part) for part in address.split(" "))
+        except ValueError:
+            return []
+        return [FoundPlace(f"{address} on the grid", GRID.at(x, y))]
 
     def geocode(self, addresses: Sequence[Address]) -> list[GeocodeOutcome]:
         outcomes = []
@@ -89,13 +110,15 @@ class Api:
     `run_jobs` runs the queued worker jobs in-process, on the default synthetic grid.
     """
 
-    def __init__(self, app: Any, sender: RecordingEmailSender, queue: RecordingQueue) -> None:
+    def __init__(
+        self, app: Any, sender: RecordingEmailSender, queue: RecordingQueue, geocoder: FakeGeocoder
+    ) -> None:
         self.app = app
         self.sender = sender
         self.queue = queue
         self.clients: list[httpx.AsyncClient] = []
         self.network: Callable[[Any], StateGraph] = lambda bbox: build_state_graph(GRID.segments())
-        self.geocoder = FakeGeocoder()
+        self.geocoder = geocoder
 
     async def run_jobs(self) -> list[str]:
         context = Context(
@@ -129,12 +152,12 @@ class Api:
 @pytest.fixture
 async def api(migrated: None, tmp_path: Path) -> AsyncIterator[Api]:
     settings = Settings(database_url=DATABASE_URL or "", cookie_secure=False)
-    sender, queue = RecordingEmailSender(), RecordingQueue()
-    app = create_app(settings, sender, LocalObjectStore(tmp_path / "uploads"), queue)
+    sender, queue, geocoder = RecordingEmailSender(), RecordingQueue(), FakeGeocoder()
+    app = create_app(settings, sender, LocalObjectStore(tmp_path / "uploads"), queue, geocoder)
     tables = ", ".join(t.name for t in reversed(Base.metadata.sorted_tables))
     async with app.state.engine.begin() as connection:
         await connection.execute(text(f"TRUNCATE {tables} CASCADE"))
-    harness = Api(app, sender, queue)
+    harness = Api(app, sender, queue, geocoder)
     yield harness
     for client in harness.clients:
         await client.aclose()

@@ -172,6 +172,21 @@
       },
       "Location": {
         "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "pattern": "^[^\\x00-\\x1f\\x7f]*[^\\x00-\\x1f\\x7f\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff][^\\x00-\\x1f\\x7f]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "as the geocoder matched it; none for a place given by lat, lon",
+            "title": "Address"
+          },
           "lat": {
             "maximum": 90.0,
             "minimum": -90.0,
@@ -281,7 +296,7 @@
           "name": {
             "maxLength": 200,
             "minLength": 1,
-            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "pattern": "^[^\\x00-\\x1f\\x7f]*[^\\x00-\\x1f\\x7f\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff][^\\x00-\\x1f\\x7f]*$",
             "title": "Name",
             "type": "string"
           }
@@ -451,6 +466,36 @@
         "title": "OrganizationOut",
         "type": "object"
       },
+      "PlaceOut": {
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "lat": {
+            "title": "Lat",
+            "type": "number"
+          },
+          "lon": {
+            "title": "Lon",
+            "type": "number"
+          }
+        },
+        "required": [
+          "lon",
+          "lat",
+          "address"
+        ],
+        "title": "PlaceOut",
+        "type": "object"
+      },
       "Placement": {
         "description": "The street a stop is on, and its curb relative to the street's forward direction.",
         "properties": {
@@ -537,7 +582,7 @@
               {
                 "maxLength": 200,
                 "minLength": 1,
-                "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+                "pattern": "^[^\\x00-\\x1f\\x7f]*[^\\x00-\\x1f\\x7f\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff][^\\x00-\\x1f\\x7f]*$",
                 "type": "string"
               },
               {
@@ -594,7 +639,7 @@
           "name": {
             "maxLength": 200,
             "minLength": 1,
-            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "pattern": "^[^\\x00-\\x1f\\x7f]*[^\\x00-\\x1f\\x7f\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff][^\\x00-\\x1f\\x7f]*$",
             "title": "Name",
             "type": "string"
           },
@@ -620,11 +665,11 @@
         "type": "string"
       },
       "RouteOut": {
+        "description": "A route as stored; the input rules in `RouteFields` judged it when it was set.",
         "properties": {
           "capacity_carts": {
             "anyOf": [
               {
-                "minimum": 1.0,
                 "type": "integer"
               },
               {
@@ -635,7 +680,7 @@
             "title": "Capacity Carts"
           },
           "disposal": {
-            "$ref": "#/components/schemas/Location"
+            "$ref": "#/components/schemas/Site"
           },
           "id": {
             "format": "uuid",
@@ -645,7 +690,6 @@
           "max_route_hours": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.0,
                 "type": "number"
               },
               {
@@ -660,14 +704,16 @@
             "type": "string"
           },
           "yard": {
-            "$ref": "#/components/schemas/Location"
+            "$ref": "#/components/schemas/Site"
           }
         },
         "required": [
+          "id",
           "name",
           "yard",
           "disposal",
-          "id"
+          "capacity_carts",
+          "max_route_hours"
         ],
         "title": "RouteOut",
         "type": "object"
@@ -1003,6 +1049,37 @@
           "report"
         ],
         "title": "SharedRun",
+        "type": "object"
+      },
+      "Site": {
+        "description": "A yard or disposal site as stored.",
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "lat": {
+            "title": "Lat",
+            "type": "number"
+          },
+          "lon": {
+            "title": "Lon",
+            "type": "number"
+          }
+        },
+        "required": [
+          "lon",
+          "lat",
+          "address"
+        ],
+        "title": "Site",
         "type": "object"
       },
       "StepOut": {
@@ -1877,6 +1954,97 @@
         "summary": "Add Member",
         "tags": [
           "organizations"
+        ]
+      }
+    },
+    "/orgs/{org_id}/places": {
+      "get": {
+        "description": "Every place an address could be, best first; an empty list if it names none.\n\n\"lat, lon\" is taken as that point. The geocoder covers the United States.",
+        "operationId": "find_places_orgs__org_id__places_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "address",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[^\\x00-\\x1f\\x7f]*[^\\x00-\\x1f\\x7f\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff][^\\x00-\\x1f\\x7f]*$",
+              "title": "Address",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "starboard_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Starboard Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PlaceOut"
+                  },
+                  "title": "Response Find Places Orgs  Org Id  Places Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "the request body could not be read"
+          },
+          "401": {
+            "description": "not signed in"
+          },
+          "403": {
+            "description": "the caller's role is too low for this"
+          },
+          "404": {
+            "description": "no such organization for the caller, or no such row in it"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "502": {
+            "description": "the geocoder did not answer; try again"
+          }
+        },
+        "summary": "Find Places",
+        "tags": [
+          "places"
         ]
       }
     },
