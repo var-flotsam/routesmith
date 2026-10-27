@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="Starboard Routing" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>Byram &amp; Mill</name>
+    <desc>Streets © OpenStreetMap contributors, under the Open Database Licence (openstreetmap.org/copyright), as of 2026-10-01.</desc>
+    <copyright author="OpenStreetMap contributors">
+      <license>https://opendatacommons.org/licenses/odbl/1-0/</license>
+    </copyright>
+    <link href="https://www.openstreetmap.org/copyright"><text>OpenStreetMap copyright</text></link>
+  </metadata>
   <trk><name>Byram &amp; Mill, route 1</name><trkseg>
     <trkpt lat="41.000000" lon="-73.650000"/>
     <trkpt lat="41.000000" lon="-73.649000"/>

@@ -290,9 +290,11 @@ Record each as an ADR in `docs/adr/` when decided.
 
 1. Licence: decided. The whole repository is under FSL-1.1-ALv2 (see
    `LICENSE.md`): source-available, no competing commercial use, each version
-   becomes Apache-2.0 two years after release. Record as ADR-0001. The one
-   exception is `data/demo/result/`, the static demo's OSM-derived result, which
-   is under the ODbL 1.0 (ADR-0007).
+   becomes Apache-2.0 two years after release. Record as ADR-0001. Two folders
+   are exceptions: `data/demo/result/`, the static demo's OSM-derived result,
+   which is under the ODbL 1.0 (ADR-0007), and the route sheet's DejaVu Sans
+   fonts in `packages/export/src/starboard/export/fonts/`, under their own
+   licence (ADR-0008).
 2. Geocoder: decided 2026-10-26. A free geocoder for now: the US Census batch
    geocoder behind a `Geocoder` interface (ADR-0005). A paid or self-hosted
    one can replace it later.

@@ -19,5 +19,6 @@ __pycache__/
 
 # Web app
 apps/web/node_modules/
+apps/web/.pnpm-store/
 apps/web/dist/
 apps/web/*.tsbuildinfo

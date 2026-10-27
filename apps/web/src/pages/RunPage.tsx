@@ -43,7 +43,7 @@ export function RunPage() {
         <p>
           {run.data.state === "failed"
             ? `The run failed: ${run.data.failure_reason ?? "no reason given"}`
-            : `Solving for ${run.data.trucks} trucks (${run.data.state})…`}
+            : `Solving for ${run.data.trucks} ${run.data.trucks === 1 ? "truck" : "trucks"} (${run.data.state})…`}
         </p>
       )}
       {report.isError && <p className="error">{report.error.message}</p>}
