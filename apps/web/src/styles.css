@@ -44,6 +44,18 @@ button {
   padding: 0.4rem 0.6rem;
 }
 
+/* Tables: room between columns, row headings at the start, figures in even widths. */
+th,
+td {
+  padding: 0.2rem 1rem 0.2rem 0;
+  text-align: start;
+  vertical-align: top;
+}
+
+td {
+  font-variant-numeric: tabular-nums;
+}
+
 .muted {
   color: var(--muted);
 }

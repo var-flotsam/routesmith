@@ -12,12 +12,13 @@ import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from xml.etree import ElementTree
 
 import pytest
 from pypdf import PdfReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 
-from starboard.export.files import routes_gpx, routes_kml, stops_csv
+from starboard.export.files import osm_credit, routes_gpx, routes_kml, stops_csv
 from starboard.export.model import RunExport, Step
 from starboard.export.route_sheet import distance, duration, instruction, route_sheet_pdf
 
@@ -60,6 +61,27 @@ def test_names_are_escaped_in_xml():
     gpx = routes_gpx(_sample()).decode()
     assert "Byram &amp; Mill, route 1" in gpx
     assert "<" not in gpx.split("<name>")[1].split("</name>")[0]
+
+
+GPX = {"gpx": "http://www.topografix.com/GPX/1/1"}
+KML = {"kml": "http://www.opengis.net/kml/2.2"}
+
+
+def test_files_with_a_path_credit_openstreetmap_its_licence_and_its_date():
+    run = _sample()
+    gpx = ElementTree.fromstring(routes_gpx(run))
+    assert gpx[0].tag == "{http://www.topografix.com/GPX/1/1}metadata"  # GPX 1.1: it comes first
+    assert gpx.findtext("gpx:metadata/gpx:desc", namespaces=GPX) == osm_credit(run)
+    assert "OpenStreetMap contributors" in osm_credit(run) and "2026-10-01" in osm_credit(run)
+    licence = gpx.findtext("gpx:metadata/gpx:copyright/gpx:license", namespaces=GPX)
+    assert licence == "https://opendatacommons.org/licenses/odbl/1-0/"
+    kml = ElementTree.fromstring(routes_kml(run))
+    assert kml.findtext("kml:Document/kml:description", namespaces=KML) == osm_credit(run)
+
+
+def test_the_credit_says_when_the_data_date_is_not_recorded():
+    run = dataclasses.replace(_sample(), osm_snapshot=None)
+    assert osm_credit(run).endswith("as of a date not recorded.")
 
 
 def test_the_route_sheet_pdf_matches_its_snapshot_byte_for_byte():

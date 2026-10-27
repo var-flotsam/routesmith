@@ -284,21 +284,52 @@
 - Merging #70, #76 (stacked on #70), #71 and this log (say "merge" in the
   thread).
 
+## 2026-10-26 (the public static demo)
+
+**Done**
+
+- #73 merged: `starboard.worker.demo_result` builds the demo route's result as
+  files in `data/demo/result/`, snapping and solving as the worker does (the
+  worker's solve step is now `solve_report`, which `solve_run` and the builder
+  share; the solver is unchanged). 714 of 754 stops placed; current 7.34 h,
+  optimized 4.63 h; wrong-side pickups 54 to 0. The result's paths come from
+  OSM, so `data/demo/result/` is under the ODbL 1.0 (owner's decision; ADR-0001,
+  HANDOFF §6.1); the rest of the repo stays FSL-1.1-ALv2.
+- #74 merged: the result view keeps working without a basemap or WebGL, on
+  phones and touch screens, and in dark mode.
+- #75 merged: `pnpm build:demo` builds a static demo page with no API behind
+  it (ADR-0007), and `.github/workflows/pages.yml` publishes it from `main`
+  once the repository variable `PAGES_ENABLED` is `true`. CI builds the demo
+  on every PR.
+
+**Next**
+
+- Rebuild the demo result when `data/demo/` or the solver's output changes
+  (see `data/demo/PROVENANCE.md`). A test fails when the demo stops or route
+  change; the `demo`-marked test compares a rebuild with the committed result.
+- The README: what the product does, a link to the demo, how to run it.
+
+**Blocked on the owner**
+
+- Publishing the demo: make the repository public; Settings > Pages >
+  Source: GitHub Actions; set `PAGES_ENABLED` to `true`; run the `pages`
+  workflow once.
+
 ## 2026-10-26 (evening: CI, the route sheet font, the first local run)
 
 **Done**
 
 - #70, #76, #71 and #72 merged on the owner's "merge". Main's CI is green.
-- #77: a stop row the database cannot store (a NUL character, a stop id or
+- #77 merged: a stop row the database cannot store (a NUL character, a stop id or
   route id over 100 characters, a street over 200) or that the csv module
   cannot read is a rejected row; before, it failed the whole upload.
-- #79: the GPX and KML files credit OpenStreetMap and the ODbL, as the route
+- #79 merged: the GPX and KML files credit OpenStreetMap and the ODbL, as the route
   sheet does.
 - The first full local run, on the owner's machine under Docker Compose:
   sign-in, the demo's 754 stops imported (about 2 minutes, mostly fetching
   streets), review cleared, a solve (about 2 minutes; route time 7.77 h to
   4.70 h), all four downloads, and a share link. It all works.
-- #80 fixes what the run turned up: pnpm's 213 MB store landed in the
+- #80 merged: fixes what the run turned up: pnpm's 213 MB store landed in the
   checkout and the image's build context (now a volume), cramped tables, and
   "Solving for 1 trucks".
 
@@ -312,4 +343,4 @@
 
 **Blocked on the owner**
 
-- Merging #77, #79, #80 and this log (say "merge" in the thread).
+- Merging this log (say "merge" in the thread).

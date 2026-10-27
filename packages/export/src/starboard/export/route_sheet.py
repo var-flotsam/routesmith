@@ -52,6 +52,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from starboard.export.files import osm_credit
 from starboard.export.model import RunExport, Step, TruckRoute
 
 _SECONDS_PER_MINUTE = 60
@@ -280,9 +281,7 @@ def _laid_out(run: RunExport) -> bytes:
                 _STEP,
             ),
             _text(
-                "Streets © OpenStreetMap contributors, under the Open Database Licence "
-                f"(openstreetmap.org/copyright), as of {run.osm_snapshot or 'a date not recorded'}."
-                " The dot marks the yard, where the route starts and ends.",
+                f"{osm_credit(run)} The dot marks the yard, where the route starts and ends.",
                 _NOTE,
             ),
             Spacer(1, 0.15 * inch),
