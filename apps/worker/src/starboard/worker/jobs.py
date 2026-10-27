@@ -252,6 +252,38 @@ def _snapped(
 STREET_NOT_IN_NETWORK = "street_not_in_network"
 
 
+def comparison_request(
+    capacity_carts: int | None,
+    max_route_hours: float | None,
+    trucks: int,
+    objective: RouteObjective,
+    route_of: dict[str, str],
+) -> ComparisonRequest:
+    """What a run asks of `compare`, from its route's truck and the run's settings."""
+    duration_s = None if max_route_hours is None else max_route_hours * _SECONDS_PER_HOUR
+    profile = TruckProfile(capacity_carts=capacity_carts, max_route_duration_s=duration_s)
+    return ComparisonRequest(
+        trucks=trucks, objective=objective, settings=SolveSettings(profile), route_of=route_of
+    )
+
+
+def solve_report(
+    graph: StateGraph,
+    stops: Sequence[SnappedStop],
+    missing: Sequence[dict[str, str]],
+    sites: tuple[LonLat, LonLat],
+    request: ComparisonRequest,
+) -> dict[str, Any]:  # the report as JSON, stored as the run's result
+    """A run's report: `compare` from the yard to the disposal site, with the stops whose
+    street the network lacks (`missing`) as unserved. Module-level, so a process pool runs it."""
+    yard, disposal = sites
+    route_sites = RouteSites(place_at(graph, "yard", yard), place_at(graph, "disposal", disposal))
+    report = compare(graph, stops, route_sites, request)
+    report["unserved"] = [*report["unserved"], *missing]
+    report["osm_snapshot"] = graph.osm_snapshot
+    return report
+
+
 async def solve_run(ctx: dict[str, Any], run_id: str) -> str:
     """Solve one run and store its report; returns its final state."""
     context = context_of(ctx)
@@ -291,21 +323,16 @@ async def _solve(db: AsyncSession, context: Context, run: Run) -> None:
     bbox = bbox_around([*(_location_of(r) for r in rows), yard, disposal], NETWORK_MARGIN_M)
     graph = await asyncio.to_thread(context.network, bbox)
     stops, missing = _snapped(graph, rows)
-    sites = RouteSites(place_at(graph, "yard", yard), place_at(graph, "disposal", disposal))
-    hours = route.max_route_hours
-    profile = TruckProfile(
-        capacity_carts=route.capacity_carts,
-        max_route_duration_s=None if hours is None else hours * _SECONDS_PER_HOUR,
-    )
-    request = ComparisonRequest(
+    request = comparison_request(
+        route.capacity_carts,
+        route.max_route_hours,
         trucks=run.trucks,
         objective=RouteObjective(run.objective),
-        settings=SolveSettings(profile),
         route_of={r.stop_id: r.current_route_id for r in rows if r.current_route_id},
     )
-    report = await context.run_blocking(compare, graph, stops, sites, request)
-    report["unserved"] = [*report["unserved"], *missing]
-    report["osm_snapshot"] = graph.osm_snapshot
+    report = await context.run_blocking(
+        solve_report, graph, stops, missing, (yard, disposal), request
+    )
     db.add(RunResult(run_id=run.id, org_id=run.org_id, result=report))
     run.state = RunState.SUCCEEDED
     run.osm_snapshot = graph.osm_snapshot

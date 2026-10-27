@@ -133,10 +133,10 @@ solver ever returns, on random synthetic grids. These tests gate every merge.
   monthly. Record the OSM snapshot date on every run.
 - Geocoding: Nominatim (self-hosted or the public endpoint with rate limits)
   for v1; Google or Mapbox behind an interface later.
-- Demo dataset: address points from OpenAddresses for one small town, with a
-  synthetic "current order" sorted by street name and house number, as route
-  sheets commonly are. Committed to the repo under `data/demo/`. No customer
-  data is ever committed.
+- Demo dataset: public-domain address points for Byram, Greenwich, CT, with a
+  synthetic current order drawn as a rear-loader route (see
+  `data/demo/PROVENANCE.md`). Committed to the repo under `data/demo/`. No
+  customer data is ever committed.
 
 ---
 
@@ -288,7 +288,9 @@ Record each as an ADR in `docs/adr/` when decided.
 
 1. Licence: decided. The whole repository is under FSL-1.1-ALv2 (see
    `LICENSE.md`): source-available, no competing commercial use, each version
-   becomes Apache-2.0 two years after release. Record as ADR-0001.
+   becomes Apache-2.0 two years after release. Record as ADR-0001. The one
+   exception is `data/demo/result/`, the static demo's OSM-derived result, which
+   is under the ODbL 1.0 (ADR-0007).
 2. Geocoder: decided 2026-10-26. A free geocoder for now: the US Census batch
    geocoder behind a `Geocoder` interface (ADR-0005). A paid or self-hosted
    one can replace it later.

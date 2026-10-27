@@ -1,0 +1,15 @@
+{
+  "current_route_description": "It is a side-loader working a stop list drawn for a rear-loader, whose crew collects both curbs on one pass of each street with carts. For a cart on its left, the truck goes round to reach it from the right, or the driver gets out to bring it to the arm (a wrong-side pickup), whichever is quicker.",
+  "input_sha256": {
+    "route.json": "dd57b1554d3bd4b44558562f3bc76fd3739b0484296007d5abafab83097a3a3c",
+    "stops.csv": "d04b02de9bb6badafcf8be81abf4d635c58e82de9d51cfdc6eedbb8b6379417b"
+  },
+  "osm_snapshot": "2026-10-23T20:20:51Z",
+  "place": "Byram, Greenwich, Connecticut",
+  "stops_in_file": 754,
+  "stops_in_review": {
+    "ambiguous_street": 9,
+    "outside_network": 31
+  },
+  "stops_placed": 714
+}
