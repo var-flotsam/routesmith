@@ -9,7 +9,10 @@ Optional: `street`, which breaks ties when a stop is about equally close to two
 streets, and `route_id`, which names the truck route a stop is on today when the
 area is served by several trucks; `current_sequence` then orders stops within
 their route. A row that cannot be read becomes a rejected row with a reason;
-reading never raises on the file's contents.
+reading never raises on the file's contents. That includes a row holding the NUL
+character anywhere (no database stores it in text, and a file with one is damaged),
+a row too long for the csv module to read, and a stop id, route id or street longer
+than the stops table holds.
 """
 
 import csv
@@ -23,6 +26,11 @@ from starboard.geo.snapping import StopPoint
 from starboard.solver.graph import LonLat
 
 REQUIRED_COLUMNS = ("stop_id", "current_sequence")
+# The longest of each the stops table stores; a longer one is a rejected row.
+MAX_STOP_ID_LENGTH = 100
+MAX_ROUTE_ID_LENGTH = 100
+MAX_STREET_LENGTH = 200
+_NUL = "\x00"
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +77,26 @@ def _address(row: Mapping[str, str | None]) -> Address | None:
     return Address(line, _cell(row, "city"), _cell(row, "state"), _cell(row, "zip"))
 
 
+def _holds_nul(row: Mapping[str | None, str | list[str] | None]) -> bool:
+    # Cells past the header's columns come as a list under the key None.
+    return any(
+        _NUL in (value if isinstance(value, str) else "".join(value))
+        for value in row.values()
+        if value is not None
+    )
+
+
+def _too_long(row: Mapping[str, str | None]) -> str | None:
+    for column, longest in (
+        ("stop_id", MAX_STOP_ID_LENGTH),
+        ("route_id", MAX_ROUTE_ID_LENGTH),
+        ("street", MAX_STREET_LENGTH),
+    ):
+        if len(_cell(row, column)) > longest:
+            return f"{column} is longer than {longest} characters"
+    return None
+
+
 def _parse_row(row: Mapping[str, str | None]) -> tuple[int, StopPoint | UnlocatedStop] | str:
     stop_id = _cell(row, "stop_id")
     if not stop_id:
@@ -105,7 +133,23 @@ def read_stop_rows(handle: Iterable[str]) -> StopFile:
     rejected: list[RejectedRow] = []
     route_of: dict[str, str] = {}
     seen: set[str] = set()
-    for line_number, row in enumerate(reader, start=2):
+    rows = iter(reader)
+    line_number = 1
+    while True:
+        line_number += 1
+        try:
+            row = next(rows)
+        except StopIteration:
+            break
+        except csv.Error as error:  # such as a field over the csv module's size limit
+            rejected.append(RejectedRow(line_number, f"unreadable: {error}"))
+            continue
+        if _holds_nul(row):
+            rejected.append(RejectedRow(line_number, "holds a NUL character"))
+            continue
+        if (too_long := _too_long(row)) is not None:
+            rejected.append(RejectedRow(line_number, too_long))
+            continue
         parsed = _parse_row(row)
         if isinstance(parsed, str):
             rejected.append(RejectedRow(line_number, parsed))
