@@ -1,12 +1,25 @@
-"""The Census batch geocoder: answers read correctly, batched, cached, never raising."""
+"""The Census geocoder: batch answers read, batched, cached, never raising; one-line search."""
+
+import json
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
+
+import pytest
+import requests
 
 from starboard.geo.geocoding import (
     CENSUS_BATCH_URL,
+    CENSUS_ONELINE_MAX_CHARACTERS,
+    CENSUS_ONELINE_URL,
     Address,
     CensusGeocoder,
+    FoundPlace,
     GeocodeQuality,
+    GeocoderUnavailableError,
     geocode_all,
 )
+from starboard.solver.graph import LonLat
 
 # The service's answer layout: id, input, status, exactness, matched address, "lon,lat", ...
 ANSWER = "\n".join(
@@ -76,3 +89,108 @@ def test_geocode_all_sorts_stops_into_placed_inexact_and_unplaced(tmp_path):
     assert set(result.points) == {"s0", "s1"}
     assert result.inexact == {"s1"}
     assert result.unplaced == {"s2": GeocodeQuality.AMBIGUOUS, "s3": GeocodeQuality.NOT_FOUND}
+
+
+# The one-line search's answer layout, cut to the fields read here.
+ONE_LINE_ANSWER = json.dumps(
+    {
+        "result": {
+            "input": {"address": {"address": "1 Main St, Town, CT"}},
+            "addressMatches": [
+                {
+                    "matchedAddress": "1 MAIN ST, TOWN, CT, 06830",
+                    "coordinates": {"x": -73.6, "y": 41.0},
+                },
+                {
+                    "matchedAddress": "1 MAIN ST, TOWN, CT, 06831",
+                    "coordinates": {"x": -73.5, "y": 41.1},
+                },
+            ],
+        }
+    }
+)
+
+
+class OneLineRecorder:
+    def __init__(self, answer: str | Exception) -> None:
+        self.answer = answer
+        self.queries: list[dict[str, str]] = []
+
+    def __call__(self, url: str, params: dict[str, str]) -> str:
+        assert url == CENSUS_ONELINE_URL
+        self.queries.append(params)
+        if isinstance(self.answer, Exception):
+            raise self.answer
+        return self.answer
+
+
+def test_a_one_line_address_lists_every_place_it_could_be(tmp_path):
+    get = OneLineRecorder(ONE_LINE_ANSWER)
+    places = CensusGeocoder(tmp_path, get=get).find("  1 Main St,   Town, CT ")
+    assert places == [
+        FoundPlace("1 MAIN ST, TOWN, CT, 06830", LonLat(lon=-73.6, lat=41.0)),
+        FoundPlace("1 MAIN ST, TOWN, CT, 06831", LonLat(lon=-73.5, lat=41.1)),
+    ]
+    assert get.queries[0]["address"] == "1 Main St, Town, CT"
+
+
+def test_a_one_line_answer_is_cached_whatever_its_spacing_or_case(tmp_path):
+    CensusGeocoder(tmp_path, get=OneLineRecorder(ONE_LINE_ANSWER)).find("1 Main St, Town, CT")
+    unused = OneLineRecorder(RuntimeError("asked again"))
+    again = CensusGeocoder(tmp_path, get=unused).find("1 MAIN ST,  town, ct")
+    assert len(again) == 2 and unused.queries == []
+
+
+def test_an_address_that_names_no_place_finds_none(tmp_path):
+    answer = json.dumps({"result": {"addressMatches": []}})
+    assert CensusGeocoder(tmp_path, get=OneLineRecorder(answer)).find("nowhere") == []
+
+
+@pytest.mark.parametrize(
+    "answer", [requests.ConnectionError("offline"), "<html>busy</html>", '{"errors": ["?"]}']
+)
+def test_no_answer_or_an_unreadable_one_is_the_geocoder_unavailable(tmp_path, answer):
+    with pytest.raises(GeocoderUnavailableError):
+        CensusGeocoder(tmp_path, get=OneLineRecorder(answer)).find("1 Main St")
+    assert not any(tmp_path.rglob("*.json"))  # nothing cached, so it is asked again
+
+
+def test_an_address_longer_than_the_service_takes_finds_none_without_asking(tmp_path):
+    get = OneLineRecorder(RuntimeError("asked"))
+    address = "1 Main St, " + "x" * CENSUS_ONELINE_MAX_CHARACTERS
+    assert CensusGeocoder(tmp_path, get=get).find(address) == []
+    assert get.queries == []
+
+
+def test_an_address_the_service_refuses_finds_none_and_is_asked_again(tmp_path):
+    refused = requests.Response()
+    refused.status_code = 400
+    get = OneLineRecorder(requests.HTTPError(response=refused))
+    assert CensusGeocoder(tmp_path, get=get).find("1 Main St") == []
+    assert not any(tmp_path.rglob("*.json"))
+
+
+def test_a_damaged_cache_file_is_asked_again(tmp_path):
+    CensusGeocoder(tmp_path, get=OneLineRecorder(ONE_LINE_ANSWER)).find("1 Main St")
+    (cached,) = tmp_path.rglob("*.json")
+    cached.write_text("", encoding="utf-8")  # as a write cut short would leave it
+    get = OneLineRecorder(ONE_LINE_ANSWER)
+    assert len(CensusGeocoder(tmp_path, get=get).find("1 Main St")) == 2
+    assert len(get.queries) == 1
+
+
+def test_lookups_of_one_address_at_once_each_get_the_answer(tmp_path):
+    def slow(url, params):
+        time.sleep(0.01)
+        return ONE_LINE_ANSWER
+
+    geocoder = CensusGeocoder(tmp_path, get=slow)
+    interval = sys.getswitchinterval()
+    sys.setswitchinterval(1e-5)
+    try:
+        with ThreadPoolExecutor(8) as pool:
+            answers = list(pool.map(lambda _: geocoder.find("1 Main St"), range(32)))
+    finally:
+        sys.setswitchinterval(interval)
+    assert all(len(places) == 2 for places in answers)
+    assert not any(tmp_path.rglob("*.tmp"))

@@ -22,7 +22,7 @@ async def test_a_planner_creates_and_reads_a_route(api):
     created = await owner.post(f"/orgs/{org}/routes", json=BYRAM)
     assert created.status_code == 201
     route = created.json()
-    assert route["yard"] == pytest.approx(BYRAM["yard"])
+    assert route["yard"] == {**BYRAM["yard"], "address": None}
     assert route["capacity_carts"] == 420
     assert route["max_route_hours"] is None
     read = (await owner.get(f"/orgs/{org}/routes/{route['id']}")).json()

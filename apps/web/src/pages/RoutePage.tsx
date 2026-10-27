@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router";
 
 import { api, dataOf, postForm, type Schemas } from "../api/client";
+import { describe } from "./places";
 
 // How often an upload the worker is still reading is checked again.
 const PROCESSING_POLL_MS = 2000;
@@ -110,6 +111,9 @@ export function RoutePage() {
             {route.data.capacity_carts ?? "No limit on"} carts per load
             {route.data.max_route_hours !== null &&
               `, at most ${route.data.max_route_hours} hours`}
+          </p>
+          <p className="muted">
+            Yard: {describe(route.data.yard)}. Disposal site: {describe(route.data.disposal)}.
           </p>
         </>
       )}

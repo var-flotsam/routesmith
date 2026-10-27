@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from starboard.api.routers.auth import MagicLinkRequest
 from starboard.api.routers.orgs import NewOrganization
-from starboard.api.routers.routes import Location, RouteChanges, RouteOut
+from starboard.api.routers.routes import RouteChanges, RouteOut, Site
 from starboard.geo.synthetic import Grid
 
 NUL, TAB, ESCAPE, DELETE = chr(0), chr(9), chr(27), chr(127)
@@ -58,8 +58,15 @@ def test_an_address_too_long_once_in_lower_case_is_refused():
 
 
 def test_a_stored_route_name_reads_back_whatever_it_holds():
-    site = Location(lon=0, lat=0)
-    route = RouteOut(id=uuid.uuid4(), name=f"Route{TAB}1", yard=site, disposal=site)
+    site = Site(lon=0, lat=0, address=None)
+    route = RouteOut(
+        id=uuid.uuid4(),
+        name=f"Route{TAB}1",
+        yard=site,
+        disposal=site,
+        capacity_carts=None,
+        max_route_hours=None,
+    )
     assert route.name == f"Route{TAB}1"
 
 

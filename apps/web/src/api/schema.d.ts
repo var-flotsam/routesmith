@@ -156,6 +156,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/orgs/{org_id}/places": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find Places
+         * @description Every place an address could be, best first; an empty list if it names none.
+         *
+         *     "lat, lon" is taken as that point. The geocoder covers the United States.
+         */
+        get: operations["find_places_orgs__org_id__places_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/orgs/{org_id}/routes": {
         parameters: {
             query?: never;
@@ -482,6 +504,11 @@ export interface components {
         };
         /** Location */
         Location: {
+            /**
+             * Address
+             * @description as the geocoder matched it; none for a place given by lat, lon
+             */
+            address?: string | null;
             /** Lat */
             lat: number;
             /** Lon */
@@ -591,6 +618,15 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** PlaceOut */
+        PlaceOut: {
+            /** Address */
+            address: string | null;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+        };
         /**
          * Placement
          * @description The street a stop is on, and its curb relative to the street's forward direction.
@@ -645,14 +681,17 @@ export interface components {
          * @enum {string}
          */
         RouteObjective: "balanced-total" | "longest-route" | "total";
-        /** RouteOut */
+        /**
+         * RouteOut
+         * @description A route as stored; the input rules in `RouteFields` judged it when it was set.
+         */
         RouteOut: {
             /**
              * Capacity Carts
              * @description carts per load
              */
-            capacity_carts?: number | null;
-            disposal: components["schemas"]["Location"];
+            capacity_carts: number | null;
+            disposal: components["schemas"]["Site"];
             /**
              * Id
              * Format: uuid
@@ -662,10 +701,10 @@ export interface components {
              * Max Route Hours
              * @description longest route
              */
-            max_route_hours?: number | null;
+            max_route_hours: number | null;
             /** Name */
             name: string;
-            yard: components["schemas"]["Location"];
+            yard: components["schemas"]["Site"];
         };
         /** RunOut */
         RunOut: {
@@ -789,6 +828,18 @@ export interface components {
             report: components["schemas"]["RunReport"];
             /** Route Name */
             route_name: string;
+        };
+        /**
+         * Site
+         * @description A yard or disposal site as stored.
+         */
+        Site: {
+            /** Address */
+            address: string | null;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
         };
         /**
          * StepOut
@@ -1370,6 +1421,76 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    find_places_orgs__org_id__places_get: {
+        parameters: {
+            query: {
+                address: string;
+            };
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: {
+                starboard_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaceOut"][];
+                };
+            };
+            /** @description the request body could not be read */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description the caller's role is too low for this */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description no such organization for the caller, or no such row in it */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description the geocoder did not answer; try again */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

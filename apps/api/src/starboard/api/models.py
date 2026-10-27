@@ -112,6 +112,9 @@ class Route(Base):
     # PostGIS points; GeoAlchemy2 gives them no Python type.
     yard: Mapped[Any] = mapped_column(_point())
     disposal: Mapped[Any] = mapped_column(_point())
+    # Each site's address as the geocoder matched it; none for a site given by coordinates.
+    yard_address: Mapped[str | None] = mapped_column(String(200))
+    disposal_address: Mapped[str | None] = mapped_column(String(200))
     created_at: Mapped[datetime] = _created()
 
 

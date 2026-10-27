@@ -10,9 +10,10 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starboard.api.db import engine_for, session_maker
 from starboard.api.email import ConsoleEmailSender, EmailSender
 from starboard.api.queue import ArqQueue, JobQueue
-from starboard.api.routers import auth, exports, orgs, routes, runs, shares, uploads
+from starboard.api.routers import auth, exports, orgs, places, routes, runs, shares, uploads
 from starboard.api.settings import Settings
 from starboard.api.storage import LocalObjectStore, ObjectStore
+from starboard.geo.geocoding import AddressFinder, CensusGeocoder
 
 _METHOD_NOT_ALLOWED = 405
 
@@ -27,6 +28,7 @@ def create_app(
     email_sender: EmailSender | None = None,
     store: ObjectStore | None = None,
     queue: JobQueue | None = None,
+    address_finder: AddressFinder | None = None,
 ) -> FastAPI:
     """The app; it connects to the database and Redis on first use, not here."""
     app = FastAPI(
@@ -40,6 +42,7 @@ def create_app(
     app.state.email_sender = email_sender or ConsoleEmailSender()
     app.state.store = store or LocalObjectStore(settings.upload_dir)
     app.state.queue = queue or ArqQueue(settings.redis_url)
+    app.state.address_finder = address_finder or CensusGeocoder(settings.geocode_cache_dir)
 
     @app.get("/healthz", tags=["operations"])
     async def healthz() -> dict[str, str]:
@@ -66,7 +69,7 @@ def create_app(
             headers={"Allow": ", ".join(methods)},
         )
 
-    routers = (auth, orgs, routes, uploads, runs, shares, exports)
+    routers = (auth, orgs, routes, places, uploads, runs, shares, exports)
     for module in routers:
         app.include_router(module.router)
     return app
