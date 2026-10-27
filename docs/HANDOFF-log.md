@@ -332,6 +332,12 @@
 - #80 merged: fixes what the run turned up: pnpm's 213 MB store landed in the
   checkout and the image's build context (now a volume), cramped tables, and
   "Solving for 1 trucks".
+- #81 merged: this log.
+- #82 merged: the yard and disposal site are found by address (ADR-0009),
+  at the owner's request. The API asks the Census one-line search while the
+  planner waits, lists every place that fits, and the route keeps the address
+  each site was matched as; "lat, lon" still works. Tried on the owner's
+  machine with the real geocoder.
 
 **Next**
 
@@ -343,4 +349,5 @@
 
 **Blocked on the owner**
 
-- Merging this log (say "merge" in the thread).
+- Merging this update to the log (say "merge" in the thread).
+- GitHub and Google OAuth: client registrations under the owner's accounts.
