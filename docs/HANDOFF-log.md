@@ -351,3 +351,23 @@
 
 - Merging this update to the log (say "merge" in the thread).
 - GitHub and Google OAuth: client registrations under the owner's accounts.
+
+## 2026-10-27 (README)
+
+**Done**
+
+- #84: README rewritten for a visitor who opens it from the demo: CI, Pages
+  and licence status images; a link to the demo and a picture of it
+  (`docs/media/demo-byram.png`); the demo's scorecard, current vs optimized,
+  from `data/demo/result/shared-run.json`; how geo, solver and export fit
+  together; the CLI path for running without Docker; test and CI commands; a
+  table of the repository layout. "Run it locally" is unchanged.
+- #84: `check-banned-terms.sh` skips binary files (`grep -I`).
+
+**Next**
+
+- Phase 8 (HANDOFF §5): loading states and the faster review queue.
+
+**Blocked on the owner**
+
+- GitHub and Google OAuth client registrations.
