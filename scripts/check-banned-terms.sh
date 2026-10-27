@@ -10,6 +10,9 @@
 #   check-banned-terms.sh --range A..B    scan files and commit messages in a range (CI)
 #
 # Prints only the paths or commits that match, never the patterns.
+#
+# Binary files (images, PDFs) are skipped: a case-insensitive regex over
+# compressed bytes matches by chance, and the terms are text.
 set -eu
 
 list="${BANNED_TERMS_FILE:-$HOME/.config/starboard/banned-terms.txt}"
@@ -30,10 +33,10 @@ scan_paths() {
     [ -n "$p" ] || continue
     if [ "$source" = staged ]; then
       git cat-file -e ":$p" 2>/dev/null || continue
-      git show ":$p" | grep -Eiqf "$patterns" || continue
+      git show ":$p" | grep -IEiqf "$patterns" || continue
     else
       git cat-file -e "$source:$p" 2>/dev/null || continue
-      git show "$source:$p" | grep -Eiqf "$patterns" || continue
+      git show "$source:$p" | grep -IEiqf "$patterns" || continue
     fi
     echo "banned term in $p" >&2
     status=1
