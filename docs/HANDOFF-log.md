@@ -283,3 +283,34 @@
 
 - Merging #70, #76 (stacked on #70), #71 and this log (say "merge" in the
   thread).
+
+## 2026-10-26 (the public static demo)
+
+**Done**
+
+- #73 merged: `starboard.worker.demo_result` builds the demo route's result as
+  files in `data/demo/result/`, snapping and solving as the worker does (the
+  worker's solve step is now `solve_report`, which `solve_run` and the builder
+  share; the solver is unchanged). 714 of 754 stops placed; current 7.34 h,
+  optimized 4.63 h; wrong-side pickups 54 to 0. The result's paths come from
+  OSM, so `data/demo/result/` is under the ODbL 1.0 (owner's decision; ADR-0001,
+  HANDOFF §6.1); the rest of the repo stays FSL-1.1-ALv2.
+- #74 merged: the result view keeps working without a basemap or WebGL, on
+  phones and touch screens, and in dark mode.
+- #75 merged: `pnpm build:demo` builds a static demo page with no API behind
+  it (ADR-0007), and `.github/workflows/pages.yml` publishes it from `main`
+  once the repository variable `PAGES_ENABLED` is `true`. CI builds the demo
+  on every PR.
+
+**Next**
+
+- Rebuild the demo result when `data/demo/` or the solver's output changes
+  (see `data/demo/PROVENANCE.md`). A test fails when the demo stops or route
+  change; the `demo`-marked test compares a rebuild with the committed result.
+- The README: what the product does, a link to the demo, how to run it.
+
+**Blocked on the owner**
+
+- Publishing the demo: make the repository public; Settings > Pages >
+  Source: GitHub Actions; set `PAGES_ENABLED` to `true`; run the `pages`
+  workflow once.
