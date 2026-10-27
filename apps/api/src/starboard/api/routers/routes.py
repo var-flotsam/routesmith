@@ -43,6 +43,7 @@ class RouteChanges(BaseModel):
 
 class RouteOut(RouteFields):
     id: uuid.UUID
+    name: str  # as stored; `Name` judges a name when it is set
 
 
 def _point(location: Location) -> WKBElement:
@@ -70,7 +71,7 @@ def _out(route: Route) -> RouteOut:
 async def create_route(org_id: uuid.UUID, body: RouteFields, db: Database, _: Planner) -> RouteOut:
     route = Route(
         org_id=org_id,
-        name=body.name.strip(),
+        name=body.name,
         yard=_point(body.yard),
         disposal=_point(body.disposal),
         capacity_carts=body.capacity_carts,
@@ -100,7 +101,7 @@ async def change_route(
     route = await one_in_org(db, Route, org_id, route_id)
     given = body.model_fields_set
     if body.name is not None:
-        route.name = body.name.strip()
+        route.name = body.name
     if body.yard is not None:
         route.yard = _point(body.yard)
     if body.disposal is not None:

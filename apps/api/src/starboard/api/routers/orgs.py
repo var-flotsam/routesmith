@@ -43,7 +43,7 @@ async def create_organization(
     body: NewOrganization, user: CurrentUser, db: Database
 ) -> OrganizationOut:
     """A new organization, with the caller as its owner."""
-    org = Organization(name=body.name.strip())
+    org = Organization(name=body.name)
     db.add(org)
     await db.flush()
     db.add(Membership(org_id=org.id, user_id=user.id, role=Role.OWNER))
