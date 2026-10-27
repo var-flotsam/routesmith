@@ -73,18 +73,27 @@ services:
   web:
     image: node:24-slim
     working_dir: /app/apps/web
-    command: ["sh", "-c", "corepack enable && pnpm install --frozen-lockfile && pnpm dev --host"]
+    # If node_modules was installed from another store, pnpm reinstalls it rather than stop
+    # to ask, which it cannot do here without a terminal.
+    command:
+      - sh
+      - -c
+      - corepack enable && pnpm install --frozen-lockfile --config.confirm-modules-purge=false && pnpm dev --host
     environment:
       STARBOARD_API_TARGET: http://api:8000
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      # pnpm's package store, in a volume: left to itself, pnpm puts it in the checkout.
+      npm_config_store_dir: /pnpm-store
     ports:
       - "5173:5173"
     volumes:
       - ./apps/web:/app/apps/web
       - web-modules:/app/apps/web/node_modules
+      - web-store:/pnpm-store
     depends_on:
       - api
 
 volumes:
   web-modules:
+  web-store:
   db-data:
